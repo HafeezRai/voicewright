@@ -1,0 +1,58 @@
+# HorizontalPodAutoscalers.
+#
+# Scale on CPU. The honest caveat: the operationally interesting signal for this
+# system is *concurrent WebRTC sessions* and p95 STT/NLU/TTS latency -- not CPU --
+# and neither is a Kubernetes resource metric. A production setup would scale on
+# a custom/external metric (e.g. cloudpso_active_webrtc_sessions via Prometheus
+# Adapter, or cloudpso_ai_stt_latency_seconds). CPU is the portable default that
+# works on any cluster; the Prometheus-backed variant is left as an explicit
+# follow-up rather than pretended to exist here.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: backend-core
+  namespace: cloudpso
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: backend-core
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+  behavior:
+    scaleDown:
+      # Long stabilization: a session that just started must not be scaled away.
+      stabilizationWindowSeconds: 300
+    scaleUp:
+      stabilizationWindowSeconds: 30
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: ai-engine
+  namespace: cloudpso
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: ai-engine
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 75
+  behavior:
+    scaleDown:
+      # Model weights are expensive to re-load; scale down slowly.
+      stabilizationWindowSeconds: 600

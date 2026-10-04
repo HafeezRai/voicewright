@@ -1,0 +1,54 @@
+# CI/CD promotion gates for model artifacts (Phase 5).
+#
+# Consumed by .github/workflows/ci.yml. A model artifact may be promoted from
+# staging to production only when every gate here passes. The gates are the
+# ones this repository can actually evaluate -- no invented accuracy thresholds,
+# because there is no labelled evaluation set in this project yet (stated as a
+# known gap in mlops-pipeline/README.md rather than papered over).
+version: 1
+
+gates:
+  - id: numerical-parity
+    description: >-
+      Exported ONNX graph must reproduce the source model within tolerance on
+      fixed inputs (mlops-pipeline/tests/test_export_parity.py).
+    command: pytest mlops-pipeline/tests/test_export_parity.py
+    required: true
+    blocks: [production]
+
+  - id: triton-config-valid
+    description: >-
+      Every config.pbtxt must parse against Triton's ModelConfig protobuf and be
+      internally consistent (max_batch_size vs dynamic_batching, name == dir).
+    command: python mlops-pipeline/triton/validate_configs.py
+    required: true
+    blocks: [production]
+
+  - id: artifact-checksums
+    description: >-
+      manifest.json sha256 values must match the staged artifacts, so production
+      serves exactly the bytes that passed parity.
+    command: python mlops-pipeline/export/verify_manifest.py
+    required: true
+    blocks: [production]
+
+  - id: regression-suites
+    description: >-
+      backend-core, ai-engine and frontend test suites must all pass; a model
+      change must not break the services that consume it.
+    command: make -C mlops-pipeline verify-regression
+    required: true
+    blocks: [production]
+
+environments:
+  staging:
+    # A model may land in staging on parity alone -- it is where it gets
+    # exercised by traffic before promotion.
+    required_gates: [numerical-parity, triton-config-valid]
+  production:
+    required_gates:
+      - numerical-parity
+      - triton-config-valid
+      - artifact-checksums
+      - regression-suites
+    approvals: 1

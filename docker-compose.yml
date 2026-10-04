@@ -97,6 +97,9 @@ services:
       - "${PROMETHEUS_PORT:-9090}:9090"
     volumes:
       - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      # Phase 5: alerting/recording rules. Required — prometheus.yml declares a
+      # rule_files glob, and Prometheus refuses to start if it matches nothing.
+      - ./infra/prometheus/rules:/etc/prometheus/rules:ro
       - prometheus-data:/prometheus
     networks:
       - cloudpso-net

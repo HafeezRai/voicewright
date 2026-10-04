@@ -1,0 +1,10 @@
+# Files excluded from the packaged chart.
+.DS_Store
+.git/
+.gitignore
+*.tmproj
+.idea/
+.vscode/
+*.orig
+*.rej
+README.md

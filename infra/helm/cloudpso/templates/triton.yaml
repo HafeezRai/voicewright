@@ -1,0 +1,125 @@
+{{- if .Values.triton.enabled }}
+{{- if and .Values.triton.persistence.enabled (not .Values.triton.persistence.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "cloudpso.fullname" . }}-triton-models
+  labels:
+    {{- include "cloudpso.componentLabels" (dict "ctx" $ "component" "triton") | nindent 4 }}
+spec:
+  accessModes:
+    {{- toYaml .Values.triton.persistence.accessModes | nindent 4 }}
+  {{- if .Values.triton.persistence.storageClassName }}
+  storageClassName: {{ .Values.triton.persistence.storageClassName | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.triton.persistence.size }}
+---
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cloudpso.fullname" . }}-triton
+  labels:
+    {{- include "cloudpso.componentLabels" (dict "ctx" $ "component" "triton") | nindent 4 }}
+spec:
+  replicas: {{ .Values.triton.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "cloudpso.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: triton
+  template:
+    metadata:
+      labels:
+        {{- include "cloudpso.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: triton
+      {{- with .Values.triton.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- include "cloudpso.imagePullSecrets" . | nindent 6 }}
+      {{- with .Values.triton.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.triton.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: triton
+          image: "{{ .Values.triton.image.repository }}:{{ .Values.triton.image.tag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          args:
+            - tritonserver
+            - --model-repository=/models
+            {{- if .Values.triton.strictModelConfig }}
+            - --strict-model-config=true
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.triton.service.httpPort }}
+            - name: grpc
+              containerPort: {{ .Values.triton.service.grpcPort }}
+            - name: metrics
+              containerPort: {{ .Values.triton.service.metricsPort }}
+          resources:
+            {{- toYaml .Values.triton.resources | nindent 12 }}
+          startupProbe:
+            httpGet:
+              path: /v2/health/ready
+              port: http
+            periodSeconds: 10
+            failureThreshold: 60
+          livenessProbe:
+            httpGet:
+              path: /v2/health/live
+              port: http
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /v2/health/ready
+              port: http
+            periodSeconds: 10
+          volumeMounts:
+            {{- if .Values.triton.persistence.enabled }}
+            - name: models
+              mountPath: /models
+            {{- end }}
+            - name: shm
+              mountPath: /dev/shm
+      volumes:
+        {{- if .Values.triton.persistence.enabled }}
+        - name: models
+          persistentVolumeClaim:
+            claimName: {{ .Values.triton.persistence.existingClaim | default (printf "%s-triton-models" (include "cloudpso.fullname" .)) }}
+        {{- end }}
+        - name: shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: {{ .Values.triton.shmSize }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "cloudpso.fullname" . }}-triton
+  labels:
+    {{- include "cloudpso.componentLabels" (dict "ctx" $ "component" "triton") | nindent 4 }}
+spec:
+  type: {{ .Values.triton.service.type }}
+  selector:
+    {{- include "cloudpso.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: triton
+  ports:
+    - name: http
+      port: {{ .Values.triton.service.httpPort }}
+      targetPort: http
+    - name: grpc
+      port: {{ .Values.triton.service.grpcPort }}
+      targetPort: grpc
+    - name: metrics
+      port: {{ .Values.triton.service.metricsPort }}
+      targetPort: metrics
+{{- end }}

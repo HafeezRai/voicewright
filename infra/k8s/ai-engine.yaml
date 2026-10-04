@@ -1,0 +1,141 @@
+# ai-engine: STT -> NLU -> TTS pipeline (HTTP + gRPC VoiceGateway).
+#
+# Model weights live on a ReadWriteMany PVC so replicas share one copy rather
+# than each pulling ~1 GB. In production this is normally an RWX volume
+# (EFS/Filestore/CephFS) or an initContainer that populates an emptyDir from
+# object storage; RWX is shown here because it maps 1:1 onto the compose named
+# volume `ai-engine-models`.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ai-engine-models
+  namespace: cloudpso
+  labels:
+    app.kubernetes.io/name: ai-engine
+spec:
+  accessModes: ["ReadWriteMany"]
+  resources:
+    requests:
+      storage: 10Gi        # STT ~150 MB + TTS ~80 MB + Laya ~840 MB + headroom
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-engine
+  namespace: cloudpso
+  labels:
+    app.kubernetes.io/name: ai-engine
+    app.kubernetes.io/component: inference
+    app.kubernetes.io/part-of: cloudpso-voice-agent
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ai-engine
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ai-engine
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8001"
+        prometheus.io/path: "/metrics"
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      # Lazy model loading means a new pod is ready before weights are resident;
+      # the long grace period lets an in-flight utterance finish.
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: ai-engine
+          image: cloudpso/ai-engine:0.3.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8001
+            - name: grpc
+              containerPort: 50052
+          envFrom:
+            - configMapRef:
+                name: cloudpso-config
+          env:
+            - name: HUGGING_FACE_HUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: cloudpso-secrets
+                  key: HUGGING_FACE_HUB_TOKEN
+                  optional: true
+          resources:
+            # Sized for CPU inference of Whisper-base + MiniLM/Laya. The
+            # startup probe window is generous because the first request after a
+            # cold start loads weights.
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "2"
+              memory: "3Gi"
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 5
+            failureThreshold: 30      # up to 150 s to become ready
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 2
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: models
+              mountPath: /models
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: ai-engine-models
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-engine
+  namespace: cloudpso
+  labels:
+    app.kubernetes.io/name: ai-engine
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: ai-engine
+  ports:
+    - name: http
+      port: 8001
+      targetPort: http
+    - name: grpc
+      port: 50052
+      targetPort: grpc

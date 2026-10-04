@@ -1,0 +1,41 @@
+# Staging overlay: smaller footprint, one replica of everything, no GPU.
+#   helm install cloudpso-staging infra/helm/cloudpso -f infra/helm/cloudpso/values-staging.yaml
+global:
+  environment: staging
+  imagePullPolicy: Always        # staging tracks the newest pushed tag
+
+config:
+  logLevel: DEBUG
+  corsAllowOrigins: "https://voice.staging.cloudpso.example"
+
+backendCore:
+  replicaCount: 1
+  image:
+    tag: "staging"
+  autoscaling:
+    enabled: false
+
+aiEngine:
+  replicaCount: 1
+  image:
+    tag: "staging"
+  persistence:
+    # ReadWriteOnce is enough for a single replica and is available on every
+    # storage class; staging does not need the RWX volume production uses.
+    accessModes: ["ReadWriteOnce"]
+    size: 10Gi
+  autoscaling:
+    enabled: false
+
+frontend:
+  replicaCount: 1
+  image:
+    tag: "staging"
+
+triton:
+  enabled: false
+
+ingress:
+  host: voice.staging.cloudpso.example
+  tls:
+    secretName: cloudpso-staging-tls

@@ -1,0 +1,55 @@
+# Model promotion map: which ai-engine stage is served by which artifact.
+#
+# This is the single source of truth that ties ai-engine's configured model ids
+# (app/config.py) to the artifacts exported/staged for Triton. The export and
+# populate scripts read nothing from here yet; it documents the mapping and is
+# consumed by the CI promotion gate in .github/workflows/ci.yml.
+version: 1
+
+stages:
+  stt:
+    # No ONNX export: faster-whisper's artifact IS a CTranslate2 model.
+    ai_engine_setting: AI_ENGINE_STT_MODEL
+    ai_engine_value: base.en
+    source_repo: Systran/faster-whisper-base.en
+    artifact_format: ctranslate2
+    triton_model: whisper_ct2
+    triton_backend: ctranslate2
+    export: none
+    rationale: >-
+      CTranslate2 is its own optimised runtime (int8, fused kernels). Converting
+      to ONNX would discard the quantisation; the CTranslate2 Triton backend
+      loads the directory as-is.
+
+  nlu_primary:
+    ai_engine_setting: AI_ENGINE_NLU_MODEL
+    ai_engine_value: convaiinnovations/laya
+    source_repo: convaiinnovations/laya
+    artifact_format: onnx
+    triton_model: laya_encoder
+    triton_backend: onnxruntime
+    export: torch.onnx.export (encoder body only)
+    parity_tolerance: 1.0e-3
+    rationale: >-
+      Laya ships an ONNX runtime but not its export script, so the ModernBERT
+      encoder is exported independently. The RL policy head stays client-side.
+
+  nlu_fallback:
+    ai_engine_setting: AI_ENGINE_NLU_HF_MODEL
+    ai_engine_value: sentence-transformers/all-MiniLM-L6-v2
+    source_repo: sentence-transformers/all-MiniLM-L6-v2
+    artifact_format: onnx
+    triton_model: minilm_nlu
+    triton_backend: onnxruntime
+    export: torch.onnx.export
+    parity_tolerance: 1.0e-3
+
+  tts:
+    ai_engine_setting: AI_ENGINE_TTS_MODEL
+    ai_engine_value: vits-piper-en_US-amy-low
+    source_repo: k2-fsa/sherpa-onnx (tts-models release)
+    artifact_format: onnx
+    triton_model: piper_tts
+    triton_backend: onnxruntime
+    export: none (authored as ONNX by the Piper pipeline)
+    frontend: tts_frontend (python backend, espeak-ng phonemisation)

@@ -1,0 +1,128 @@
+{{- if .Values.aiEngine.enabled }}
+{{- if and .Values.aiEngine.persistence.enabled (not .Values.aiEngine.persistence.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "cloudpso.fullname" . }}-ai-engine-models
+  labels:
+    {{- include "cloudpso.componentLabels" (dict "ctx" $ "component" "ai-engine") | nindent 4 }}
+spec:
+  accessModes:
+    {{- toYaml .Values.aiEngine.persistence.accessModes | nindent 4 }}
+  {{- if .Values.aiEngine.persistence.storageClassName }}
+  storageClassName: {{ .Values.aiEngine.persistence.storageClassName | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.aiEngine.persistence.size }}
+---
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cloudpso.fullname" . }}-ai-engine
+  labels:
+    {{- include "cloudpso.componentLabels" (dict "ctx" $ "component" "ai-engine") | nindent 4 }}
+spec:
+  {{- if not .Values.aiEngine.autoscaling.enabled }}
+  replicas: {{ .Values.aiEngine.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "cloudpso.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: ai-engine
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        {{- include "cloudpso.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: ai-engine
+      {{- with .Values.aiEngine.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- include "cloudpso.imagePullSecrets" . | nindent 6 }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      terminationGracePeriodSeconds: {{ .Values.aiEngine.terminationGracePeriodSeconds }}
+      containers:
+        - name: ai-engine
+          image: "{{ .Values.aiEngine.image.repository }}:{{ .Values.aiEngine.image.tag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.aiEngine.service.port }}
+            - name: grpc
+              containerPort: {{ .Values.aiEngine.service.grpcPort }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "cloudpso.fullname" . }}-config
+          env:
+            - name: HUGGING_FACE_HUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "cloudpso.secretName" . }}
+                  key: HUGGING_FACE_HUB_TOKEN
+                  optional: true
+          resources:
+            {{- toYaml .Values.aiEngine.resources | nindent 12 }}
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 5
+            failureThreshold: {{ .Values.aiEngine.startupProbe.failureThreshold }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 20
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          volumeMounts:
+            {{- if .Values.aiEngine.persistence.enabled }}
+            - name: models
+              mountPath: /models
+            {{- end }}
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        {{- if .Values.aiEngine.persistence.enabled }}
+        - name: models
+          persistentVolumeClaim:
+            claimName: {{ .Values.aiEngine.persistence.existingClaim | default (printf "%s-ai-engine-models" (include "cloudpso.fullname" .)) }}
+        {{- end }}
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "cloudpso.fullname" . }}-ai-engine
+  labels:
+    {{- include "cloudpso.componentLabels" (dict "ctx" $ "component" "ai-engine") | nindent 4 }}
+spec:
+  type: {{ .Values.aiEngine.service.type }}
+  selector:
+    {{- include "cloudpso.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: ai-engine
+  ports:
+    - name: http
+      port: {{ .Values.aiEngine.service.port }}
+      targetPort: http
+    - name: grpc
+      port: {{ .Values.aiEngine.service.grpcPort }}
+      targetPort: grpc
+{{- end }}

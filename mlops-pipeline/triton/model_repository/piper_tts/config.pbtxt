@@ -1,0 +1,57 @@
+# Triton model config — TTS (Piper / VITS voice, already ONNX).
+#
+# Artifact : ai-engine/models/tts/vits-piper-en_US-amy-low/en_US-amy-low.onnx
+#            (staged into <model>/1/ by export/populate_triton_repo.py)
+# Verified : I/O signature read from the real graph via ONNX Runtime:
+#              input        int64  [batch, phonemes]
+#              input_lengths int64 [batch]
+#              scales       fp32   [3]        (noise, length, noise_w)
+#              output       fp32   [batch, 1, 1, samples]
+#
+# max_batch_size is 0 (batching OFF) on purpose. Triton assumes dim[0] is the
+# batch dim whenever max_batch_size > 0, but `scales` here is a single fixed
+# 3-vector with NO batch dimension — under batching Triton would read it as
+# batch=3. VITS is an autoregressive-free but vocoder-heavy graph whose win is
+# elsewhere; the honest config is explicit full dims with no server-side
+# batching, and requests are batched (if at all) by the client.
+name: "piper_tts"
+
+backend: "onnxruntime"
+max_batch_size: 0
+
+input [
+  {
+    name: "input"
+    data_type: TYPE_INT64
+    dims: [ -1, -1 ]      # [batch, phonemes]
+  },
+  {
+    name: "input_lengths"
+    data_type: TYPE_INT64
+    dims: [ -1 ]          # [batch]
+  },
+  {
+    name: "scales"
+    data_type: TYPE_FP32
+    dims: [ 3 ]           # fixed: noise_scale, length_scale, noise_scale_w
+  }
+]
+
+output [
+  {
+    name: "output"
+    data_type: TYPE_FP32
+    dims: [ -1, 1, 1, -1 ]  # [batch, 1, 1, samples] @ 16 kHz mono
+  }
+]
+
+instance_group [
+  {
+    kind: KIND_GPU
+    count: 1
+  }
+]
+
+# NOTE: the phoneme front-end (espeak-ng) is NOT part of this graph. It runs
+# either in the client or as the `tts_frontend` python-backend step — see that
+# model's config and the ensemble note in mlops-pipeline/README.md.

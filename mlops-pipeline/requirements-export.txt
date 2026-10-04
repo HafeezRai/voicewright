@@ -1,0 +1,23 @@
+# Dependencies for the Phase 5 export + parity + Triton-config tooling.
+#
+# These are NOT ai-engine runtime dependencies: export is a build-time step and
+# Triton serves the artifacts, so the serving container does not carry `onnx`,
+# `onnxscript` or `tritonclient`. Install them into a build/dev environment:
+#
+#   python -m pip install -r ai-engine/requirements.txt -r mlops-pipeline/requirements-export.txt
+#
+# `torch`, `transformers` and `safetensors` come from ai-engine/requirements.txt
+# (Laya and the HF fallback need them); only the export-specific extras are here.
+
+# torch.onnx.export (legacy TorchScript path) needs `onnx`; the newer
+# torch.export-based path needs `onnxscript`. Both are pinned so an export run
+# is reproducible.
+onnx>=1.16,<2.0
+onnxscript>=0.1,<1.0
+
+# Runs the exported graphs for parity, and reads I/O signatures off artifacts.
+onnxruntime>=1.17,<2.0
+
+# Parses config.pbtxt against the REAL Triton ModelConfig protobuf, so a config
+# typo is caught without a GPU or a running Triton server.
+tritonclient>=2.40,<3.0

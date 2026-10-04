@@ -1,0 +1,33 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "cloudpso.fullname" . }}-config
+  labels:
+    {{- include "cloudpso.labels" . | nindent 4 }}
+data:
+  # Values shared by every component and the per-component blocks below mirror
+  # the variables docker-compose.yml sets for the same images.
+  CLOUDEPSO_ENV: {{ .Values.global.environment | quote }}
+  CLOUDEPSO_LOG_LEVEL: {{ .Values.config.logLevel | quote }}
+  CLOUDEPSO_CONFIG_PREFIX: {{ .Values.config.configPrefix | quote }}
+  CLOUDEPSO_CORS_ALLOW_ORIGINS: {{ .Values.config.corsAllowOrigins | quote }}
+
+  {{- if .Values.backendCore.enabled }}
+  BACKEND_CORE_HOST: "0.0.0.0"
+  BACKEND_CORE_PORT: {{ .Values.backendCore.service.port | quote }}
+  BACKEND_CORE_GRPC_PORT: {{ .Values.backendCore.service.grpcPort | quote }}
+  AI_ENGINE_URL: "http://{{ include "cloudpso.fullname" . }}-ai-engine:{{ .Values.aiEngine.service.port }}"
+  {{- end }}
+
+  {{- if .Values.aiEngine.enabled }}
+  AI_ENGINE_HOST: "0.0.0.0"
+  AI_ENGINE_PORT: {{ .Values.aiEngine.service.port | quote }}
+  AI_ENGINE_GRPC_PORT: {{ .Values.aiEngine.service.grpcPort | quote }}
+  AI_ENGINE_GRPC_ENABLED: "true"
+  AI_ENGINE_MODEL_CACHE: "/models"
+  AI_ENGINE_LAZY_MODELS: "true"
+  AI_ENGINE_DEVICE: "cpu"
+  AI_ENGINE_NLU_BACKEND: "auto"
+  AI_ENGINE_STT_MODEL: "base.en"
+  AI_ENGINE_TTS_MODEL: "vits-piper-en_US-amy-low"
+  {{- end }}

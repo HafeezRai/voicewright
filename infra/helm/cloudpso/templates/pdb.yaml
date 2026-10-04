@@ -1,0 +1,44 @@
+{{- if and .Values.backendCore.enabled .Values.backendCore.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "cloudpso.fullname" . }}-backend-core
+  labels:
+    {{- include "cloudpso.componentLabels" (dict "ctx" $ "component" "backend-core") | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.backendCore.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "cloudpso.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: backend-core
+{{- end }}
+{{- if and .Values.aiEngine.enabled .Values.aiEngine.podDisruptionBudget.enabled }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "cloudpso.fullname" . }}-ai-engine
+  labels:
+    {{- include "cloudpso.componentLabels" (dict "ctx" $ "component" "ai-engine") | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.aiEngine.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "cloudpso.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: ai-engine
+{{- end }}
+{{- if and .Values.frontend.enabled .Values.frontend.podDisruptionBudget.enabled }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "cloudpso.fullname" . }}-frontend-dashboard
+  labels:
+    {{- include "cloudpso.componentLabels" (dict "ctx" $ "component" "frontend-dashboard") | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.frontend.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "cloudpso.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: frontend-dashboard
+{{- end }}

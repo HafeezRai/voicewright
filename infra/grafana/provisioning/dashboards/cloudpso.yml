@@ -1,0 +1,19 @@
+# Grafana dashboard provider: load every JSON dashboard from ./dashboards.
+#
+# The dashboards are committed as JSON (infra/grafana/dashboards/*.json) and
+# mounted read-only, so the provisioned set is exactly what is in git.
+apiVersion: 1
+
+providers:
+  - name: CloudPSO
+    orgId: 1
+    folder: CloudPSO
+    type: file
+    disableDeletion: false
+    # Re-read the directory periodically so a changed dashboard JSON is picked
+    # up without restarting Grafana.
+    updateIntervalSeconds: 30
+    allowUiUpdates: false
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

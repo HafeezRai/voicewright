@@ -1,0 +1,18 @@
+# Grafana datasource provisioning.
+#
+# The dashboards reference this datasource by uid ("prometheus"), so the uid
+# here must not change without updating them.
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    # Matches docker-compose.yml's prometheus service name and internal port.
+    url: http://prometheus:9090
+    isDefault: true
+    jsonData:
+      timeInterval: 15s        # matches scrape_interval in prometheus.yml
+      httpMethod: POST
+    editable: false

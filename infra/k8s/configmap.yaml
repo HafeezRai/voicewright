@@ -1,0 +1,45 @@
+# Non-secret configuration, shared by the application Deployments.
+#
+# These are exactly the variables docker-compose.yml passes to the same images,
+# with the container-internal ports and service DNS names that Kubernetes
+# provides. Nothing here is a credential -- see secret.example.yaml for that,
+# which is a *template* and contains no real values.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cloudpso-config
+  namespace: cloudpso
+  labels:
+    app.kubernetes.io/part-of: cloudpso-voice-agent
+data:
+  # --- cross-service --------------------------------------------------------
+  CLOUDEPSO_ENV: "production"
+  CLOUDEPSO_LOG_LEVEL: "INFO"
+  CLOUDEPSO_CONFIG_PREFIX: "cloudpso"
+
+  # Browser origins allowed to call the HTTP APIs. WebSockets bypass CORS, so
+  # this only gates the REST endpoints the dashboard's metrics panels use.
+  CLOUDEPSO_CORS_ALLOW_ORIGINS: "https://voice.cloudpso.example"
+
+  # --- backend-core ---------------------------------------------------------
+  BACKEND_CORE_HOST: "0.0.0.0"
+  BACKEND_CORE_PORT: "8000"
+  BACKEND_CORE_GRPC_PORT: "50051"
+  AI_ENGINE_URL: "http://ai-engine:8001"
+
+  # --- ai-engine ------------------------------------------------------------
+  AI_ENGINE_HOST: "0.0.0.0"
+  AI_ENGINE_PORT: "8001"
+  AI_ENGINE_GRPC_PORT: "50052"
+  AI_ENGINE_GRPC_ENABLED: "true"
+  AI_ENGINE_MODEL_CACHE: "/models"
+  AI_ENGINE_LAZY_MODELS: "true"
+  # CPU in-cluster by default: the models are small and the GPU (if any) is
+  # reserved for Triton. Set to `cuda` on a GPU node pool.
+  AI_ENGINE_DEVICE: "cpu"
+  AI_ENGINE_NLU_BACKEND: "auto"
+  AI_ENGINE_STT_MODEL: "base.en"
+  AI_ENGINE_TTS_MODEL: "vits-piper-en_US-amy-low"
+
+  # --- triton (optional inference server) -----------------------------------
+  TRITON_MODEL_REPOSITORY: "/models"

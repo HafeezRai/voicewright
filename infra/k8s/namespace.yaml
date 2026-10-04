@@ -1,0 +1,17 @@
+# Namespace for the CloudPSO Voice Agent stack.
+#
+# Pod Security Admission is set to `restricted`, which this repo's workloads
+# satisfy (see securityContext in each Deployment): non-root, read-only root
+# filesystem, all capabilities dropped, seccomp RuntimeDefault. Setting it at
+# the namespace means a workload that regresses on any of those is rejected at
+# admission rather than quietly running privileged.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cloudpso
+  labels:
+    app.kubernetes.io/part-of: cloudpso-voice-agent
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted

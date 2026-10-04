@@ -1,0 +1,163 @@
+# Prometheus alerting + recording rules for the CloudPSO Voice Agent.
+#
+# Every metric referenced here is declared in backend-core/app/metrics.py or
+# ai-engine/app/metrics.py -- no invented series. Names match the emitters:
+#
+#   cloudpso_active_webrtc_sessions            gauge
+#   cloudpso_webrtc_sessions_total             counter
+#   cloudpso_bargein_events_total              counter
+#   cloudpso_vad_frames_processed_total        counter{backend,speech}
+#   cloudpso_signaling_connections             gauge
+#   cloudpso_ai_stt_requests_total             counter{status}
+#   cloudpso_ai_stt_latency_seconds            histogram
+#   cloudpso_ai_stt_audio_seconds              histogram
+#   cloudpso_ai_nlu_requests_total             counter{backend,status}
+#   cloudpso_ai_nlu_latency_seconds            histogram{backend}
+#   cloudpso_ai_tts_requests_total             counter{status}
+#   cloudpso_ai_tts_latency_seconds            histogram
+#   cloudpso_ai_tts_cancelled_total            counter
+#   cloudpso_ai_pipeline_requests_total        counter{status,nlu_backend}
+#   cloudpso_ai_pipeline_latency_seconds       histogram
+#   cloudpso_ai_grpc_audio_frames_total        counter
+#   cloudpso_ai_grpc_events_total              counter{kind}
+groups:
+  # --- recording rules ------------------------------------------------------
+  # Pre-compute the latency quantiles the dashboards and alerts both want, so
+  # the (relatively expensive) histogram_quantile runs once per rule interval
+  # rather than once per panel per refresh.
+  - name: cloudpso.latency
+    interval: 15s
+    rules:
+      - record: cloudpso:stt_latency_p95_seconds
+        expr: histogram_quantile(0.95, sum by (le) (rate(cloudpso_ai_stt_latency_seconds_bucket[5m])))
+      - record: cloudpso:nlu_latency_p95_seconds
+        expr: histogram_quantile(0.95, sum by (le) (rate(cloudpso_ai_nlu_latency_seconds_bucket[5m])))
+      - record: cloudpso:tts_latency_p95_seconds
+        expr: histogram_quantile(0.95, sum by (le) (rate(cloudpso_ai_tts_latency_seconds_bucket[5m])))
+      - record: cloudpso:pipeline_latency_p95_seconds
+        expr: histogram_quantile(0.95, sum by (le) (rate(cloudpso_ai_pipeline_latency_seconds_bucket[5m])))
+
+  - name: cloudpso.throughput
+    interval: 30s
+    rules:
+      # Audio seconds per second, not requests per second: a rate over audio
+      # duration is the honest measure of STT/TTS load.
+      - record: cloudpso:stt_audio_seconds_rate
+        expr: sum(rate(cloudpso_ai_stt_audio_seconds_sum[5m])) / sum(rate(cloudpso_ai_stt_audio_seconds_count[5m]))
+      - record: cloudpso:tts_audio_seconds_rate
+        expr: sum(rate(cloudpso_ai_tts_audio_seconds_sum[5m])) / sum(rate(cloudpso_ai_tts_audio_seconds_count[5m]))
+
+  - name: cloudpso.errors
+    interval: 30s
+    rules:
+      - record: cloudpso:stt_error_ratio
+        expr: |
+          sum(rate(cloudpso_ai_stt_requests_total{status!="ok"}[5m]))
+            / clamp_min(sum(rate(cloudpso_ai_stt_requests_total[5m])), 1e-9)
+      - record: cloudpso:pipeline_error_ratio
+        expr: |
+          sum(rate(cloudpso_ai_pipeline_requests_total{status!="ok"}[5m]))
+            / clamp_min(sum(rate(cloudpso_ai_pipeline_requests_total[5m])), 1e-9)
+
+  # --- alerts ---------------------------------------------------------------
+  - name: cloudpso.alerts
+    rules:
+      - alert: CloudPSOServiceDown
+        expr: up{job=~"backend-core|ai-engine"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.job }} is not scrapeable"
+          description: >-
+            Prometheus has failed to scrape {{ $labels.job }} for 2 minutes.
+            Either the service is down or /metrics is unreachable.
+
+      - alert: CloudPSOPipelineHighLatency
+        # The whole point of the system is an interactive turn; 1.5 s p95 for a
+        # full STT->NLU->TTS turn is the budget this repo is built around.
+        expr: cloudpso:pipeline_latency_p95_seconds > 1.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Voice pipeline p95 latency above 1.5 s"
+          description: >-
+            p95 full-turn latency is {{ $value | humanizeDuration }} over the
+            last 5 minutes. Check which stage dominates with the per-stage p95
+            recording rules (cloudpso:stt_latency_p95_seconds, nlu, tts).
+
+      - alert: CloudPSOSTTHighErrorRatio
+        expr: cloudpso:stt_error_ratio > 0.05
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "STT error ratio above 5%"
+          description: "{{ $value | humanizePercentage }} of STT requests are failing."
+
+      - alert: CloudPSOPipelineHighErrorRatio
+        expr: cloudpso:pipeline_error_ratio > 0.05
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Full-pipeline error ratio above 5%"
+          description: "{{ $value | humanizePercentage }} of pipeline turns are failing."
+
+      - alert: CloudPSONoActiveSessions
+        # A production voice gateway with zero sessions for 30 minutes is far
+        # more likely to be broken than genuinely idle.
+        expr: sum(cloudpso_active_webrtc_sessions) == 0
+        for: 30m
+        labels:
+          severity: info
+        annotations:
+          summary: "No active WebRTC sessions for 30 minutes"
+          description: >-
+            Either there is no traffic or the gateway can no longer accept
+            sessions. Confirm with cloudpso_webrtc_sessions_total (has it moved?)
+            and cloudpso_signaling_connections.
+
+      - alert: CloudPSOSignalingChurn
+        # Sessions appearing without signalling connections (or vice versa)
+        # points at a leak or a half-open WebSocket.
+        expr: sum(cloudpso_signaling_connections) == 0 and sum(cloudpso_active_webrtc_sessions) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Active sessions with no signalling connections"
+          description: >-
+            {{ $value }} sessions are open but no WebSocket signalling
+            connections are registered -- check for leaked or half-open sockets.
+
+      - alert: CloudPSOHighBargeInRate
+        # Barge-in is a feature, but a rate this high usually means TTS is
+        # talking over the user (bad turn detection) rather than users genuinely
+        # interrupting.
+        expr: |
+          sum(rate(cloudpso_bargein_events_total[10m]))
+            / clamp_min(sum(rate(cloudpso_ai_pipeline_requests_total[10m])), 1e-9) > 0.5
+        for: 10m
+        labels:
+          severity: info
+        annotations:
+          summary: "Barge-in rate above 50% of turns"
+          description: >-
+            More than half of turns are being interrupted. Verify the VAD
+            thresholds and that the agent is not mis-timing its replies.
+
+      - alert: CloudPSOVADBackendDegraded
+        # backend-core falls back to the energy VAD if the Silero ONNX model is
+        # unavailable; that is a silent quality regression unless it is alerted.
+        expr: sum(rate(cloudpso_vad_frames_processed_total{backend="energy"}[10m])) > 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "VAD is running the energy fallback, not Silero"
+          description: >-
+            Frames are being classified by the energy backend, which means the
+            Silero ONNX model failed to load. Speech detection quality is
+            degraded.

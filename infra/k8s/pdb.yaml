@@ -1,0 +1,35 @@
+# PodDisruptionBudgets: keep the stack serving through voluntary disruptions
+# (node drains, cluster upgrades). Without these, a drain can take every replica
+# of a Deployment at once and drop live voice sessions.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: backend-core
+  namespace: cloudpso
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: backend-core
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: ai-engine
+  namespace: cloudpso
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ai-engine
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: frontend-dashboard
+  namespace: cloudpso
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: frontend-dashboard

@@ -1,0 +1,53 @@
+{{- if and .Values.backendCore.enabled .Values.backendCore.autoscaling.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "cloudpso.fullname" . }}-backend-core
+  labels:
+    {{- include "cloudpso.componentLabels" (dict "ctx" $ "component" "backend-core") | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "cloudpso.fullname" . }}-backend-core
+  minReplicas: {{ .Values.backendCore.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.backendCore.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.backendCore.autoscaling.targetCPUUtilizationPercentage }}
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+    scaleUp:
+      stabilizationWindowSeconds: 30
+{{- end }}
+{{- if and .Values.aiEngine.enabled .Values.aiEngine.autoscaling.enabled }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "cloudpso.fullname" . }}-ai-engine
+  labels:
+    {{- include "cloudpso.componentLabels" (dict "ctx" $ "component" "ai-engine") | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "cloudpso.fullname" . }}-ai-engine
+  minReplicas: {{ .Values.aiEngine.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.aiEngine.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.aiEngine.autoscaling.targetCPUUtilizationPercentage }}
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 600
+{{- end }}

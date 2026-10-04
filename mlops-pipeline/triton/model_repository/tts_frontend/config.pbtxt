@@ -1,0 +1,55 @@
+# Triton model config — TTS front-end (text -> phoneme ids), python backend.
+#
+# WHY THIS EXISTS: the Piper VITS graph (model `piper_tts`) starts at *phoneme
+# ids*. The text -> phoneme step is espeak-ng, which is not part of the ONNX
+# graph. Serving TTS end-to-end therefore needs a pre-processing step; the two
+# idiomatic Triton options are (a) a python-backend model like this one, or
+# (b) a BLS/ensemble that calls this then `piper_tts`. This model is (a).
+#
+# STATUS: STATICALLY VALIDATED ONLY. The config parses against Triton's
+# ModelConfig schema (see mlops-pipeline/triton/validate_configs.py). The
+# reference `1/model.py` was NOT executed on this host — the espeak-ng python
+# binding it depends on is not installed in the verification environment, and no
+# Triton server was run.
+name: "tts_frontend"
+
+backend: "python"
+max_batch_size: 0
+
+input [
+  {
+    name: "TEXT"
+    data_type: TYPE_STRING
+    dims: [ -1 ]          # [n_texts]
+  }
+]
+
+output [
+  {
+    name: "input"
+    data_type: TYPE_INT64
+    dims: [ -1, -1 ]      # [n_texts, phonemes]  -> matches piper_tts.input
+  },
+  {
+    name: "input_lengths"
+    data_type: TYPE_INT64
+    dims: [ -1 ]          # [n_texts]
+  },
+  {
+    name: "scales"
+    data_type: TYPE_FP32
+    dims: [ 3 ]           # noise_scale, length_scale, noise_scale_w
+  }
+]
+
+parameters: {
+  key: "VOICE_DIR"
+  value: { string_value: "/models/tts/vits-piper-en_US-amy-low" }
+}
+
+instance_group [
+  {
+    kind: KIND_CPU
+    count: 1
+  }
+]

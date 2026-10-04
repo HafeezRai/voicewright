@@ -6,8 +6,12 @@ an observability dashboard. This repository is a monorepo holding the backend
 gateway, the AI engine, the frontend dashboard, the MLOps pipeline and the
 deployment infrastructure.
 
-> **Status: Phase 1 complete.** This is a scaffold. Services expose `/health` and
-> the stack is wired end-to-end, but no voice pipeline logic exists yet.
+> **Status: Phase 5 complete.** All five phases are implemented: the WebRTC
+> gateway (Phase 2), the STT → NLU → TTS pipeline running real models (Phase 3),
+> the React dashboard (Phase 4), and the MLOps + deployment layer (Phase 5). See
+> `mlops-pipeline/README.md` and `infra/README.md` for exactly what has been run
+> versus only statically validated — Triton and Kubernetes are validated but were
+> **not** executed, because this host has no NVIDIA GPU and no cluster.
 
 ## Tech stack
 
@@ -23,12 +27,13 @@ deployment infrastructure.
 
 1. **Phase 1 — Scaffold** *(done)*: monorepo layout, docker-compose, base config
    layer, importable health-check stubs.
-2. **Phase 2 — backend-core**: WebRTC gateway, WebSocket management, VAD and
-   barge-in.
-3. **Phase 3 — ai-engine**: the STT → NLU → TTS pipeline.
-4. **Phase 4 — frontend-dashboard**: live voice demo + observability UI.
-5. **Phase 5 — mlops-pipeline + infra**: ONNX export, Triton configs, K8s,
-   Helm and Prometheus.
+2. **Phase 2 — backend-core** *(done)*: WebRTC gateway, WebSocket management, VAD
+   and barge-in.
+3. **Phase 3 — ai-engine** *(done)*: the STT → NLU → TTS pipeline.
+4. **Phase 4 — frontend-dashboard** *(done)*: live voice demo + observability UI.
+5. **Phase 5 — mlops-pipeline + infra** *(done)*: ONNX export with numerical
+   parity, Triton configs, K8s manifests, Helm chart, Prometheus rules, Grafana
+   dashboards and CI.
 
 Each phase is executed in order and must be complete before the next begins.
 

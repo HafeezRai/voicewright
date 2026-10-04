@@ -1,11 +1,21 @@
-# CloudPSO Voice Agent — minimal Prometheus scrape config (Phase 1).
-# Mounted read-only into the `prometheus` compose service.
+# CloudPSO Voice Agent — Prometheus scrape config.
+#
+# Phase 1 created this file with backend-core + ai-engine jobs; Phase 5 adds the
+# alerting/recording rules (rules/cloudpso.rules.yml) and an optional Triton job.
+#
+# Mounted read-only into the `prometheus` compose service at
+# /etc/prometheus/prometheus.yml (see docker-compose.yml). The rules directory
+# must be mounted too -- Prometheus refuses to start if a rule_files glob matches
+# nothing on a specified path, and docker-compose.yml mounts it.
 global:
-  scrape_interval: 15s       # default; override via --config.file if needed
+  scrape_interval: 15s
   evaluation_interval: 15s
   external_labels:
     cluster: cloudpso-local
     env: development
+
+rule_files:
+  - /etc/prometheus/rules/*.yml
 
 scrape_configs:
   # Prometheus scraping itself.
@@ -13,8 +23,10 @@ scrape_configs:
     static_configs:
       - targets: ["localhost:9090"]
 
-  # backend-core — WebRTC gateway / WebSocket / barge-in metrics (Phase 2).
-  # The target is the compose service DNS name and container-internal port.
+  # backend-core — WebRTC gateway / WebSocket / barge-in metrics.
+  # Series: cloudpso_active_webrtc_sessions, cloudpso_webrtc_sessions_total,
+  # cloudpso_bargein_events_total, cloudpso_vad_frames_processed_total,
+  # cloudpso_signaling_connections. Served by the app itself at /metrics.
   - job_name: backend-core
     metrics_path: /metrics
     static_configs:
@@ -22,12 +34,23 @@ scrape_configs:
         labels:
           service: backend-core
 
-  # ai-engine — STT/NLU/TTS latency and throughput metrics (Phase 3).
-  # /metrics does not exist yet; the scrape will fail until Phase 3 lands it,
-  # which is expected and harmless for a local Phase 1 stack.
+  # ai-engine — STT/NLU/TTS latency and throughput metrics.
+  # Series: cloudpso_ai_* (see ai-engine/app/metrics.py).
   - job_name: ai-engine
     metrics_path: /metrics
     static_configs:
       - targets: ["ai-engine:8001"]
         labels:
           service: ai-engine
+
+  # Triton inference server (OPTIONAL — only when the GPU serving path is up; see
+  # mlops-pipeline/triton/docker-compose.triton.yml). Down by default in the local
+  # stack, which surfaces as `up{job="triton"} == 0` rather than an error, and is
+  # excluded from CloudPSOServiceDown. Triton's own metrics are not cloudpso_*;
+  # no alert in rules/ depends on them.
+  - job_name: triton
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["triton:8002"]
+        labels:
+          service: triton

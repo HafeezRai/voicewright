@@ -1,0 +1,22 @@
+# Kustomize entry point for the raw manifests.
+#
+#   kubectl apply -k infra/k8s
+#   kubectl kustomize infra/k8s | kubeconform -strict -summary
+#
+# `secret.example.yaml` is deliberately NOT listed: it is a template containing
+# no usable Secret (see the file header). Supply the real Secret out-of-band.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: cloudpso
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - backend-core.yaml
+  - ai-engine.yaml
+  - frontend-dashboard.yaml
+  - triton.yaml          # optional; remove to run without a GPU node pool
+  - hpa.yaml
+  - pdb.yaml
+  - ingress.yaml
+commonLabels:
+  app.kubernetes.io/part-of: cloudpso-voice-agent

@@ -1,0 +1,73 @@
+# Production overlay: HA, autoscaling on, Triton on the GPU pool, PDBs enforced.
+#   helm install cloudpso infra/helm/cloudpso -f infra/helm/cloudpso/values-production.yaml
+global:
+  environment: production
+  imagePullPolicy: IfNotPresent   # immutable tags; never re-pull on restart
+
+config:
+  logLevel: INFO
+  corsAllowOrigins: "https://voice.cloudpso.example"
+
+backendCore:
+  replicaCount: 3
+  image:
+    tag: "0.2.0"
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 12
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 2
+
+aiEngine:
+  replicaCount: 3
+  image:
+    tag: "0.3.0"
+  persistence:
+    enabled: true
+    accessModes: ["ReadWriteMany"]   # one copy of the weights, shared
+    size: 20Gi
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 10
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 2
+
+frontend:
+  replicaCount: 3
+  image:
+    tag: "0.1.0"
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 2
+
+# Triton serves the exported ONNX graphs on the GPU node pool. Requires the
+# model repository PVC to be populated first (see NOTES.txt).
+triton:
+  enabled: true
+  replicaCount: 2
+  image:
+    tag: "24.08-py3"
+  persistence:
+    accessModes: ["ReadWriteMany"]
+    size: 50Gi
+  nodeSelector:
+    cloud.google.com/gke-accelerator: nvidia-l4
+  tolerations:
+    - key: nvidia.com/gpu
+      operator: Exists
+      effect: NoSchedule
+
+ingress:
+  host: voice.cloudpso.example
+  tls:
+    enabled: true
+    secretName: cloudpso-tls
+
+serviceMonitor:
+  # Enable only where the Prometheus Operator CRDs are installed.
+  enabled: false
+  interval: 15s

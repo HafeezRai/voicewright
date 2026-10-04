@@ -1,0 +1,26 @@
+apiVersion: v2
+name: cloudpso
+description: |
+  CloudPSO Voice Agent — WebRTC gateway, STT/NLU/TTS pipeline, dashboard and
+  (optionally) a Triton inference server.
+type: application
+# Chart version: bump when templates/values change.
+version: 0.5.0
+# Application version: the release this chart deploys by default. Individual
+# components carry their own image tags in values.yaml.
+appVersion: "0.3.0"
+kubeVersion: ">=1.25.0-0"
+keywords:
+  - webrtc
+  - voice
+  - stt
+  - nlu
+  - tts
+  - triton
+home: https://github.com/cloudpso/cloudpso-voice-agent
+sources:
+  - https://github.com/cloudpso/cloudpso-voice-agent
+maintainers:
+  - name: CloudPSO Platform
+annotations:
+  category: AI/MachineLearning

@@ -1,0 +1,70 @@
+{{- if .Values.frontend.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cloudpso.fullname" . }}-frontend-dashboard
+  labels:
+    {{- include "cloudpso.componentLabels" (dict "ctx" $ "component" "frontend-dashboard") | nindent 4 }}
+spec:
+  replicas: {{ .Values.frontend.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "cloudpso.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: frontend-dashboard
+  template:
+    metadata:
+      labels:
+        {{- include "cloudpso.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: frontend-dashboard
+    spec:
+      {{- include "cloudpso.imagePullSecrets" . | nindent 6 }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101          # nginx user in the alpine image
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: frontend-dashboard
+          image: "{{ .Values.frontend.image.repository }}:{{ .Values.frontend.image.tag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.frontend.service.port }}
+          resources:
+            {{- toYaml .Values.frontend.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            # nginx writes its pid/cache under /var/cache/nginx, so the root
+            # filesystem stays writable for this one container.
+            readOnlyRootFilesystem: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "cloudpso.fullname" . }}-frontend-dashboard
+  labels:
+    {{- include "cloudpso.componentLabels" (dict "ctx" $ "component" "frontend-dashboard") | nindent 4 }}
+spec:
+  type: {{ .Values.frontend.service.type }}
+  selector:
+    {{- include "cloudpso.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: frontend-dashboard
+  ports:
+    - name: http
+      port: {{ .Values.frontend.service.port }}
+      targetPort: http
+{{- end }}

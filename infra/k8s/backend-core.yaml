@@ -1,0 +1,118 @@
+# backend-core: WebRTC gateway + WebSocket signalling + VAD/barge-in.
+#
+# Probes target the REAL endpoints: GET /health (frozen contract since Phase 1)
+# and the gRPC port the service binds alongside HTTP (Phase 2). Metrics are
+# served by the same HTTP app at /metrics -- there is no separate metrics port.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend-core
+  namespace: cloudpso
+  labels:
+    app.kubernetes.io/name: backend-core
+    app.kubernetes.io/component: gateway
+    app.kubernetes.io/part-of: cloudpso-voice-agent
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: backend-core
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0        # a signalling drop kills live calls; never go below
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: backend-core
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      # WebRTC media is UDP and long-lived; give in-flight calls time to drain.
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: backend-core
+          image: cloudpso/backend-core:0.2.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8000
+            - name: grpc
+              containerPort: 50051
+          envFrom:
+            - configMapRef:
+                name: cloudpso-config
+          env:
+            - name: TURN_SHARED_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: cloudpso-secrets
+                  key: TURN_SHARED_SECRET
+                  optional: true
+          resources:
+            # Requests are sized to the observed steady state; limits leave room
+            # for a burst of concurrent sessions. CPU-only -- the VAD is a small
+            # ONNX model, and media handling is I/O-bound.
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "1"
+              memory: "512Mi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 2
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            # readOnlyRootFilesystem needs somewhere writable for tmp;
+            # the app writes nothing else.
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-core
+  namespace: cloudpso
+  labels:
+    app.kubernetes.io/name: backend-core
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: backend-core
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+    - name: grpc
+      port: 50051
+      targetPort: grpc

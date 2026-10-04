@@ -1,0 +1,10 @@
+# Staged Triton version directories hold large binaries produced by
+# export/populate_triton_repo.py (the Laya encoder graph alone is ~1.6 GiB).
+# Configs stay in git; weights do not.
+triton/model_repository/*/1/*
+# ...except the python-backend model, whose "weights" are committed source.
+!triton/model_repository/tts_frontend/1/model.py
+
+# Exported ONNX graphs + the manifest's companion binaries (the manifest itself
+# is committed as the record of what was produced).
+export/artifacts/*.onnx

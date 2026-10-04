@@ -1,0 +1,162 @@
+{
+  "generated_by": "mlops-pipeline/export/export_onnx.py",
+  "opset": 17,
+  "artifacts": [
+    {
+      "model": "minilm_nlu",
+      "stage": "nlu_fallback",
+      "source": "sentence-transformers/all-MiniLM-L6-v2",
+      "status": "exported",
+      "path": "mlops-pipeline/export/artifacts/minilm_nlu.onnx",
+      "size_bytes": 90377552,
+      "sha256": "0eaa24e099bb0b1ea801d724ced25b9e274fe725606c458168a78ebf0526b5d7",
+      "opset": 17,
+      "inputs": [
+        {
+          "name": "input_ids",
+          "type": "tensor(int64)",
+          "shape": [
+            "batch",
+            "sequence"
+          ]
+        },
+        {
+          "name": "attention_mask",
+          "type": "tensor(int64)",
+          "shape": [
+            "batch",
+            "sequence"
+          ]
+        },
+        {
+          "name": "token_type_ids",
+          "type": "tensor(int64)",
+          "shape": [
+            "batch",
+            "sequence"
+          ]
+        }
+      ],
+      "outputs": [
+        {
+          "name": "last_hidden_state",
+          "type": "tensor(float)",
+          "shape": [
+            "batch",
+            "sequence",
+            "384"
+          ]
+        }
+      ],
+      "triton_backend": "onnxruntime",
+      "notes": "Mean-pool + L2-norm stay outside the graph (match ai-engine HFIntentNLU).",
+      "seconds": 0.72
+    },
+    {
+      "model": "laya_encoder",
+      "stage": "nlu_primary",
+      "source": "convaiinnovations/laya",
+      "status": "exported",
+      "path": "mlops-pipeline/export/artifacts/laya_encoder.onnx",
+      "size_bytes": 1579833655,
+      "sha256": "0ee3fe4e584323a753bb2df7612f03982b23fd92fe91463770f0c3ab38ed33ff",
+      "opset": 17,
+      "inputs": [
+        {
+          "name": "input_ids",
+          "type": "tensor(int64)",
+          "shape": [
+            "batch",
+            "sequence"
+          ]
+        },
+        {
+          "name": "attention_mask",
+          "type": "tensor(int64)",
+          "shape": [
+            "batch",
+            "sequence"
+          ]
+        }
+      ],
+      "outputs": [
+        {
+          "name": "last_hidden_state",
+          "type": "tensor(float)",
+          "shape": [
+            "batch",
+            "sequence",
+            "1024"
+          ]
+        }
+      ],
+      "triton_backend": "onnxruntime",
+      "notes": "Encoder body only (ModernBertModel); Laya's act_head/scorer stay in the client. Tokenizer/temperature artefacts must be shipped alongside.",
+      "seconds": 34.61
+    },
+    {
+      "model": "piper_tts",
+      "stage": "tts",
+      "source": "ai-engine/models/tts/vits-piper-en_US-amy-low/en_US-amy-low.onnx",
+      "status": "already-onnx",
+      "path": "ai-engine/models/tts/vits-piper-en_US-amy-low/en_US-amy-low.onnx",
+      "size_bytes": 63104657,
+      "sha256": "8275b02c37c4ce6483b26a91704807e6de0c3f0bf8068e5d3b3598ab0da4253e",
+      "opset": 0,
+      "inputs": [
+        {
+          "name": "input",
+          "type": "tensor(int64)",
+          "shape": [
+            "batch_size",
+            "phonemes"
+          ]
+        },
+        {
+          "name": "input_lengths",
+          "type": "tensor(int64)",
+          "shape": [
+            "batch_size"
+          ]
+        },
+        {
+          "name": "scales",
+          "type": "tensor(float)",
+          "shape": [
+            "3"
+          ]
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "type": "tensor(float)",
+          "shape": [
+            "batch_size",
+            "1",
+            "1",
+            "Unsqueezeoutput_dim_3"
+          ]
+        }
+      ],
+      "triton_backend": "onnxruntime",
+      "notes": "Authored as ONNX by the Piper pipeline -- nothing to export. I/O signature read from the real graph via ONNX Runtime.",
+      "seconds": 0.0
+    },
+    {
+      "model": "whisper_ct2",
+      "stage": "stt",
+      "source": "Systran/faster-whisper-base.en",
+      "status": "native-ct2",
+      "path": "ai-engine/models/hf/hub/models--Systran--faster-whisper-base.en/snapshots/3d3d5dee26484f91867d81cb899cfcf72b96be6c/model.bin",
+      "size_bytes": 145216508,
+      "sha256": "2a166925539a16005f14ff328359f9b9adb9dc4fb631bb3b227526862e93e2ef",
+      "opset": 0,
+      "inputs": [],
+      "outputs": [],
+      "triton_backend": "ctranslate2",
+      "notes": "CTranslate2 model directory (model.bin + config.json + tokenizer + vocabulary). Served by Triton's ctranslate2 backend; converting to ONNX would discard the int8 quantisation. No export by design.",
+      "seconds": 0.0
+    }
+  ]
+}

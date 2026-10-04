@@ -1,0 +1,54 @@
+{{ .Chart.Name }} {{ .Chart.Version }} installed as "{{ .Release.Name }}" in namespace "{{ .Release.Namespace }}".
+
+Components:
+{{- if .Values.backendCore.enabled }}
+  backend-core        {{ .Values.backendCore.image.repository }}:{{ .Values.backendCore.image.tag }}  ({{ .Values.backendCore.service.port }}/tcp, gRPC {{ .Values.backendCore.service.grpcPort }})
+{{- end }}
+{{- if .Values.aiEngine.enabled }}
+  ai-engine           {{ .Values.aiEngine.image.repository }}:{{ .Values.aiEngine.image.tag }}  ({{ .Values.aiEngine.service.port }}/tcp, gRPC {{ .Values.aiEngine.service.grpcPort }})
+{{- end }}
+{{- if .Values.frontend.enabled }}
+  frontend-dashboard  {{ .Values.frontend.image.repository }}:{{ .Values.frontend.image.tag }}  ({{ .Values.frontend.service.port }}/tcp)
+{{- end }}
+{{- if .Values.triton.enabled }}
+  triton              {{ .Values.triton.image.repository }}:{{ .Values.triton.image.tag }}  ({{ .Values.triton.service.httpPort }}/{{ .Values.triton.service.grpcPort }}/{{ .Values.triton.service.metricsPort }})
+{{- else }}
+  triton              disabled
+{{- end }}
+
+Check rollout:
+  kubectl -n {{ .Release.Namespace }} get deploy -l app.kubernetes.io/instance={{ .Release.Name }}
+  kubectl -n {{ .Release.Namespace }} get pods -l app.kubernetes.io/instance={{ .Release.Name }}
+
+Health endpoints (the frozen Phase 1 contract):
+  backend-core  GET /health  -> {"status":"ok","service":"backend-core"}
+  ai-engine     GET /health  -> {"status":"ok","service":"ai-engine"}
+
+{{- if .Values.aiEngine.enabled }}
+{{- if not .Values.aiEngine.persistence.enabled }}
+WARNING: ai-engine.persistence.enabled is false. Each replica will download
+         ~1 GB of model weights into an emptyDir and download them again on
+         every restart. Enable persistence (an RWX volume) in production.
+{{- end }}
+{{- end }}
+
+{{- if not .Values.secrets.create }}
+Credentials are expected in the pre-existing Secret
+"{{ .Values.secrets.existingSecret }}". If it does not exist, create it:
+
+  kubectl -n {{ .Release.Namespace }} create secret generic {{ .Values.secrets.existingSecret }} \
+    --from-literal=HUGGING_FACE_HUB_TOKEN="<token>" \
+    --from-literal=TURN_SHARED_SECRET="<secret>"
+{{- else }}
+This release CREATED a Secret from values.yaml, which is stored in the release
+history. For anything but a throwaway environment use an external secret store
+and set secrets.create=false with secrets.existingSecret.
+{{- end }}
+
+{{- if .Values.triton.enabled }}
+Triton is enabled: populate its model repository before the pod will become
+ready (~1.6 GiB for the Laya encoder graph):
+
+  python mlops-pipeline/export/export_onnx.py --model all
+  python mlops-pipeline/export/populate_triton_repo.py
+{{- end }}

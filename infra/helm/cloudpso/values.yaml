@@ -1,0 +1,200 @@
+# Default values for the cloudpso chart.
+#
+# This file is the contract: every template reads from here, and
+# values-staging.yaml / values-production.yaml override only what differs.
+# Override on the command line with --set / -f.
+
+global:
+  environment: production
+  imagePullPolicy: IfNotPresent
+  # Labels applied to every resource (name/label conventions live in _helpers.tpl).
+  partOf: cloudpso-voice-agent
+
+image:
+  pullSecrets: []          # e.g. [ { name: regcred } ]
+
+# --- non-secret configuration (rendered into a ConfigMap) -------------------
+config:
+  logLevel: INFO
+  configPrefix: cloudpso
+  corsAllowOrigins: "https://voice.cloudpso.example"
+
+# --- secrets ---------------------------------------------------------------
+# The chart does NOT create a Secret by default. Point `existingSecret` at a
+# Secret managed by an external secret store, or set `create: true` and supply
+# values (only appropriate for throwaway environments).
+secrets:
+  existingSecret: cloudpso-secrets
+  create: false
+  huggingFaceToken: ""
+  turnSharedSecret: ""
+
+# --- backend-core ----------------------------------------------------------
+backendCore:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: cloudpso/backend-core
+    tag: "0.2.0"
+  service:
+    type: ClusterIP
+    port: 8000
+    grpcPort: 50051
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+  terminationGracePeriodSeconds: 60
+  podAnnotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8000"
+    prometheus.io/path: "/metrics"
+
+# --- ai-engine -------------------------------------------------------------
+aiEngine:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: cloudpso/ai-engine
+    tag: "0.3.0"
+  service:
+    type: ClusterIP
+    port: 8001
+    grpcPort: 50052
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "2"
+      memory: 3Gi
+  # Share one copy of the weights across replicas.
+  persistence:
+    enabled: true
+    existingClaim: ""      # set to reuse a PVC; otherwise one is created
+    accessModes: ["ReadWriteMany"]
+    size: 10Gi
+    storageClassName: ""
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 8
+    targetCPUUtilizationPercentage: 75
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+  terminationGracePeriodSeconds: 60
+  startupProbe:
+    failureThreshold: 30
+  podAnnotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8001"
+    prometheus.io/path: "/metrics"
+
+# --- frontend-dashboard ----------------------------------------------------
+frontend:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: cloudpso/frontend-dashboard
+    tag: "0.1.0"
+  service:
+    type: ClusterIP
+    port: 5173
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 128Mi
+  podDisruptionBudget:
+    enabled: false
+    minAvailable: 1
+
+# --- triton (optional GPU inference server) --------------------------------
+triton:
+  enabled: false
+  replicaCount: 1
+  image:
+    repository: nvcr.io/nvidia/tritonserver
+    tag: "24.08-py3"
+  service:
+    type: ClusterIP
+    httpPort: 8000
+    grpcPort: 8001
+    metricsPort: 8002
+  resources:
+    requests:
+      cpu: 500m
+      memory: 4Gi
+    limits:
+      cpu: "2"
+      memory: 8Gi
+      nvidia.com/gpu: "1"
+  # Node selection for the GPU pool; adjust to your cluster's labelling.
+  nodeSelector: {}
+  tolerations: []
+  persistence:
+    enabled: true
+    existingClaim: ""
+    accessModes: ["ReadWriteMany"]
+    size: 20Gi
+    storageClassName: ""
+  shmSize: 2Gi
+  strictModelConfig: true
+  podAnnotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8002"
+    prometheus.io/path: "/metrics"
+
+# --- ingress ---------------------------------------------------------------
+ingress:
+  enabled: true
+  className: nginx
+  host: voice.cloudpso.example
+  tls:
+    enabled: true
+    secretName: cloudpso-tls
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-body-size: "8m"
+
+# --- observability ---------------------------------------------------------
+# A Prometheus Operator ServiceMonitor. Off by default: the pod annotations
+# above cover a plain Prometheus install (which this repo's compose stack uses),
+# while ServiceMonitor is only meaningful where the operator CRD exists.
+serviceMonitor:
+  enabled: false
+  interval: 15s
+  additionalLabels: {}
+
+# --- pod security ----------------------------------------------------------
+# Matches the namespace's restricted Pod Security Admission in infra/k8s.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  fsGroup: 10001
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+nameOverride: ""
+fullnameOverride: ""

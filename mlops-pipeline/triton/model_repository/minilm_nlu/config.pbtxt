@@ -1,0 +1,60 @@
+# Triton model config — NLU fallback (all-MiniLM-L6-v2 encoder).
+#
+# Artifact : mlops-pipeline/export/artifacts/minilm_nlu.onnx
+# Verified : I/O signature read from the real graph via ONNX Runtime
+#            (see export/artifacts/manifest.json -> minilm_nlu.inputs/outputs).
+#
+# Dims convention: with max_batch_size > 0, Triton treats dim[0] as the batch
+# dimension and it is OMITTED from the `dims` lists below. Hence the exported
+# [batch, seq] / [batch, seq, 384] graph is declared as [-1] / [-1, 384].
+name: "minilm_nlu"
+
+backend: "onnxruntime"
+max_batch_size: 32
+
+input [
+  {
+    name: "input_ids"
+    data_type: TYPE_INT64
+    dims: [ -1 ]          # sequence length (dynamic)
+  },
+  {
+    name: "attention_mask"
+    data_type: TYPE_INT64
+    dims: [ -1 ]
+  },
+  {
+    name: "token_type_ids"
+    data_type: TYPE_INT64
+    dims: [ -1 ]
+  }
+]
+
+output [
+  {
+    name: "last_hidden_state"
+    data_type: TYPE_FP32
+    dims: [ -1, 384 ]     # hidden_size = 384 for MiniLM-L6
+  }
+]
+
+# Short utterances dominate voice traffic, so batch small and wait little: the
+# queue delay is a latency cost the caller pays, and 2 ms is negligible against
+# the ~20-40 ms model forward pass it enables batching for.
+dynamic_batching {
+  preferred_batch_size: [ 4, 8, 16 ]
+  max_queue_delay_microseconds: 2000
+}
+
+# GPU instances by default (this repo's Triton deployment target). On a CPU-only
+# host, replace with `kind: KIND_CPU` — Triton does not fall back automatically.
+instance_group [
+  {
+    kind: KIND_GPU
+    count: 1
+  }
+]
+
+# The mean-pool + L2-normalise that turns last_hidden_state into the embedding
+# the classifier uses is done by the client (matches app/nlu/hf_engine.py). This
+# graph is the shared, batchable part.

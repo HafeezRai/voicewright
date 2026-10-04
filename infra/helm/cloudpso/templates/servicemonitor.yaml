@@ -1,0 +1,70 @@
+{{- /*
+  Prometheus Operator ServiceMonitor. Off by default and gated on the CRD being
+  present, because the plain Prometheus this repo's compose stack runs does not
+  install the operator -- the pod annotations in values.yaml cover that case.
+  Enable with --set serviceMonitor.enabled=true where the CRD exists.
+*/ -}}
+{{- if .Values.serviceMonitor.enabled }}
+{{- if .Values.backendCore.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "cloudpso.fullname" . }}-backend-core
+  labels:
+    {{- include "cloudpso.labels" . | nindent 4 }}
+    {{- with .Values.serviceMonitor.additionalLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "cloudpso.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: backend-core
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: {{ .Values.serviceMonitor.interval }}
+{{- end }}
+{{- if .Values.aiEngine.enabled }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "cloudpso.fullname" . }}-ai-engine
+  labels:
+    {{- include "cloudpso.labels" . | nindent 4 }}
+    {{- with .Values.serviceMonitor.additionalLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "cloudpso.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: ai-engine
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: {{ .Values.serviceMonitor.interval }}
+{{- end }}
+{{- if .Values.triton.enabled }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "cloudpso.fullname" . }}-triton
+  labels:
+    {{- include "cloudpso.labels" . | nindent 4 }}
+    {{- with .Values.serviceMonitor.additionalLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "cloudpso.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: triton
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: {{ .Values.serviceMonitor.interval }}
+{{- end }}
+{{- end }}

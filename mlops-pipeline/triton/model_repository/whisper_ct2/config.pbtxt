@@ -1,0 +1,66 @@
+# Triton model config — STT (faster-whisper base.en, CTranslate2).
+#
+# Artifact : ai-engine/models/hf/hub/models--Systran--faster-whisper-base.en/
+#            snapshots/<rev>/  { model.bin, config.json, tokenizer.json,
+#                                vocabulary.txt }  -> staged by populate script
+#            as <model>/1/model/ (the CTranslate2 backend expects the converted
+#            model directory nested under the version dir).
+# Backend  : ctranslate2 — NOT onnxruntime. faster-whisper's artifact IS a
+#            CTranslate2 model; converting it to ONNX would discard the int8
+#            quantisation and add a lossy step for no gain (see
+#            mlops-pipeline/README.md "Why STT is not ONNX").
+#
+# Tensor names/dims below follow the Whisper-supporting CTranslate2 backend
+# example (PD-Mera/ctranslate2-triton-backend examples/model_repo/whisper/
+# config.pbtxt). NOTE the base speechmatics backend uses INPUT_IDS/OUTPUT_IDS
+# for translation models instead — the exact tensor names MUST match the backend
+# build actually deployed. This config is STATICALLY VALIDATED ONLY (it parses
+# against Triton's ModelConfig schema); no CTranslate2 Triton backend was run on
+# this host.
+name: "whisper_ct2"
+
+backend: "ctranslate2"
+max_batch_size: 4
+
+input [
+  {
+    name: "FEATURES"
+    data_type: TYPE_FP32
+    dims: [ -1 ]
+    allow_ragged_batch: true   # required for dynamic batching on this backend
+  }
+]
+input [
+  {
+    name: "PROMPTS_IDS"
+    data_type: TYPE_INT32
+    dims: [ -1 ]
+    allow_ragged_batch: true
+  }
+]
+
+# Upstream's example declares OUTPUT_IDS as TYPE_FP32, which is almost certainly
+# a typo for the token-id output (ids are integral); it is reproduced verbatim
+# so this file and the backend example agree, with the discrepancy flagged. Fix
+# to TYPE_INT32 once the deployed backend's actual output dtype is confirmed.
+output [
+  {
+    name: "OUTPUT_IDS"
+    data_type: TYPE_FP32
+    dims: [ -1 ]
+  }
+]
+
+# CPU by default: CTranslate2 int8 on CPU is the configuration Phase 3 actually
+# benchmarks (no CUDA hardware was available). Switch to KIND_GPU when serving
+# on a GPU host with a CUDA-enabled CTranslate2 build.
+instance_group [
+  {
+    kind: KIND_CPU
+    count: 1
+  }
+]
+
+dynamic_batching {
+  max_queue_delay_microseconds: 5000
+}

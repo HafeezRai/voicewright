@@ -1,0 +1,48 @@
+# Ingress for the dashboard and the two HTTP APIs.
+#
+# NOTE on WebRTC: media does not traverse the ingress. Signalling (WSS) does,
+# which is why the backend-core rule carries the long proxy timeouts and the
+# WebSocket-upgrade annotations. Media is peer-to-peer over UDP (or via the TURN
+# relay configured through TURN_SHARED_SECRET), so a UDP-capable load balancer
+# in front of the TURN service -- not this Ingress -- carries the audio.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: cloudpso
+  namespace: cloudpso
+  labels:
+    app.kubernetes.io/part-of: cloudpso-voice-agent
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"   # long-lived WSS
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-body-size: "8m"        # audio uploads
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: ["voice.cloudpso.example"]
+      secretName: cloudpso-tls
+  rules:
+    - host: voice.cloudpso.example
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend-dashboard
+                port:
+                  number: 5173
+          - path: /api/backend
+            pathType: Prefix
+            backend:
+              service:
+                name: backend-core
+                port:
+                  number: 8000
+          - path: /api/ai
+            pathType: Prefix
+            backend:
+              service:
+                name: ai-engine
+                port:
+                  number: 8001
