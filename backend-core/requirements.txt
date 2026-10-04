@@ -9,3 +9,14 @@ grpcio-tools>=1.62,<2.0
 pydantic>=2.6,<3.0
 pydantic-settings>=2.2,<3.0
 python-dotenv>=1.0,<2.0
+
+# --- Phase 2: media / audio / observability ---------------------------------
+# aiortc pulls in PyAV (av) + pylibsrtp for the WebRTC media path.
+aiortc>=1.9,<2.0
+av>=12.0,<14.0
+# Silero VAD runs through ONNX Runtime. We use the upstream ONNX asset
+# (app/audio/models/silero_vad.onnx) rather than the `silero-vad` PyPI package,
+# which would drag in a multi-GB PyTorch install for no benefit here.
+onnxruntime>=1.17,<2.0
+numpy>=1.26,<3.0
+prometheus-client>=0.20,<1.0

@@ -1,8 +1,12 @@
-// CloudPSO Voice Agent — gateway <-> AI engine gRPC contract (PLACEHOLDER).
+// CloudPSO Voice Agent — gateway <-> AI engine gRPC contract.
 //
-// Phase 1 scaffold only: this file is intentionally minimal and is NOT compiled
-// or imported by the application. It exists to reserve the contract's shape.
-// Phase 2 (gateway streaming) and Phase 3 (STT/NLU/TTS services) finalise it.
+// Phase 2 defines the *gateway* surface: a bidirectional audio stream plus a
+// health/status probe. The transcript/synthesis events in the `VoiceEvent`
+// oneof are the Phase 3 (ai-engine) payloads; Phase 2's servicer acknowledges
+// frames without interpreting them (see app/grpc/server.py).
+//
+// Regenerate stubs with `make proto` (or scripts/gen_proto.sh). Generated code
+// is committed under app/gen/ so the service builds without grpcio-tools.
 syntax = "proto3";
 
 package cloudpso.voice.v1;
@@ -11,22 +15,56 @@ package cloudpso.voice.v1;
 service VoiceGateway {
   // Bidirectional stream carrying raw audio up and transcripts/audio down.
   rpc StreamAudio(stream AudioFrame) returns (stream VoiceEvent);
+
+  // Liveness/status probe for the gateway (used by orchestrators / ai-engine).
+  rpc Health(HealthRequest) returns (HealthResponse);
 }
+
+// ---------------------------------------------------------------------------
+// Audio ingress
+// ---------------------------------------------------------------------------
 
 message AudioFrame {
   bytes payload = 1;          // raw PCM/Opus bytes
   uint32 sample_rate_hz = 2;  // e.g. 16000
   int64  sequence = 3;        // monotonically increasing frame counter
+  string session_id = 4;      // gateway session this frame belongs to
 }
+
+// ---------------------------------------------------------------------------
+// Downstream events
+// ---------------------------------------------------------------------------
 
 message VoiceEvent {
   oneof event {
-    TranscriptPartial transcript_partial = 1;
-    TranscriptFinal   transcript_final   = 2;
-    SynthesisChunk    synthesis_chunk    = 3;
+    // Phase 2: the gateway has accepted frame N. Not a transcription.
+    FrameAck          frame_ack          = 1;
+    // Phase 3 (ai-engine): transcript and synthesis payloads.
+    TranscriptPartial transcript_partial = 2;
+    TranscriptFinal   transcript_final   = 3;
+    SynthesisChunk    synthesis_chunk    = 4;
   }
+}
+
+// Gateway-level acknowledgement that an ingress frame was received.
+message FrameAck {
+  int64  sequence = 1;
+  string session_id = 2;
 }
 
 message TranscriptPartial { string text = 1; }
 message TranscriptFinal   { string text = 1; float confidence = 2; }
 message SynthesisChunk    { bytes audio = 1; }
+
+// ---------------------------------------------------------------------------
+// Health / status
+// ---------------------------------------------------------------------------
+
+message HealthRequest {}
+
+message HealthResponse {
+  string status = 1;         // "ok" when the gateway is serving
+  string service = 2;        // e.g. "backend-core"
+  uint32 active_sessions = 3;
+  uint32 vad_frames_processed = 4;
+}

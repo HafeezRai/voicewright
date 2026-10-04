@@ -1,11 +1,17 @@
 # syntax=docker/dockerfile:1
-# CloudPSO Voice Agent — backend-core (Phase 1 skeleton).
+# CloudPSO Voice Agent — backend-core (Phase 2: WebRTC + VAD + barge-in).
 FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# No system packages are required for the Phase 2 media stack: PyAV ships
+# self-contained manylinux wheels with FFmpeg bundled, and pylibsrtp (aiortc's
+# SRTP) bundles libsrtp. Keeping the image free of a system ffmpeg avoids a
+# ~170-package apt tree and keeps the image small. If a future dependency
+# lacks a manylinux wheel, add a targeted `apt-get install` layer here.
 
 WORKDIR /app
 
