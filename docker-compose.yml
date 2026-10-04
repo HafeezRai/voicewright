@@ -24,6 +24,8 @@ services:
       BACKEND_CORE_GRPC_PORT: "50051"
       # How backend-core reaches ai-engine inside the compose network.
       AI_ENGINE_URL: ${AI_ENGINE_URL:-http://ai-engine:8001}
+      # Phase 4: browser origins allowed to call the HTTP API (CORS).
+      CLOUDEPSO_CORS_ALLOW_ORIGINS: ${CLOUDEPSO_CORS_ALLOW_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
     ports:
       - "${BACKEND_CORE_PORT:-8000}:8000"
       - "${BACKEND_CORE_GRPC_PORT:-50051}:50051"
@@ -54,6 +56,8 @@ services:
       AI_ENGINE_TTS_MODEL: ${AI_ENGINE_TTS_MODEL:-vits-piper-en_US-amy-low}
       AI_ENGINE_GRPC_ENABLED: ${AI_ENGINE_GRPC_ENABLED:-true}
       AI_ENGINE_GRPC_PORT: "50052"
+      # Phase 4: browser origins allowed to call the HTTP API (CORS).
+      CLOUDEPSO_CORS_ALLOW_ORIGINS: ${CLOUDEPSO_CORS_ALLOW_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
     ports:
       - "${AI_ENGINE_PORT:-8001}:8001"
       - "${AI_ENGINE_GRPC_PORT:-50052}:50052"
@@ -68,6 +72,11 @@ services:
     build:
       context: ./frontend-dashboard
       dockerfile: Dockerfile
+      # VITE_* are baked into the bundle at build time, so they must be build
+      # args — a runtime `environment:` entry would never reach the static files.
+      args:
+        VITE_BACKEND_CORE_URL: ${VITE_BACKEND_CORE_URL:-http://localhost:8000}
+        VITE_AI_ENGINE_URL: ${VITE_AI_ENGINE_URL:-http://localhost:8001}
     image: cloudpso/frontend-dashboard:dev
     environment:
       VITE_BACKEND_CORE_URL: ${VITE_BACKEND_CORE_URL:-http://localhost:8000}

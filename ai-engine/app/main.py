@@ -23,6 +23,7 @@ from contextlib import asynccontextmanager
 import grpc
 import soundfile as sf
 from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from pydantic import BaseModel, Field
 
@@ -70,6 +71,17 @@ app = FastAPI(
     version="0.3.0",
     description="STT -> NLU -> TTS pipeline service (Phase 3).",
     lifespan=lifespan,
+)
+
+# CORS for the Phase 4 browser dashboard. Additive and off the frozen contract:
+# origins come from CLOUDEPSO_CORS_ALLOW_ORIGINS and default to the local
+# dashboard only (never "*").
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 

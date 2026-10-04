@@ -82,6 +82,15 @@ class Settings(BaseSettings):
     grpc_enabled: bool = Field(default=True, alias="AI_ENGINE_GRPC_ENABLED")
     grpc_port: int = Field(default=50052, ge=1, le=65535, alias="AI_ENGINE_GRPC_PORT")
 
+    # --- CORS (Phase 4) ------------------------------------------------------
+    # Comma-separated list of browser origins allowed to call the HTTP API.
+    # Defaults to the local dashboard only and never to "*" — a wildcard would
+    # let any page a user visits drive STT/NLU/TTS on their behalf.
+    cors_allow_origins: str = Field(
+        default="http://localhost:5173,http://127.0.0.1:5173",
+        alias="CLOUDEPSO_CORS_ALLOW_ORIGINS",
+    )
+
     # --- models --------------------------------------------------------------
     # In-container path for cached weights. On a dev host this usually does not
     # exist, in which case `models_root` falls back to `<repo>/ai-engine/models`.
@@ -149,6 +158,11 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.env == "production"
+
+    @property
+    def cors_origins(self) -> list[str]:
+        """Parsed CORS allow-list (comma-separated; blank entries dropped)."""
+        return [origin.strip() for origin in self.cors_allow_origins.split(",") if origin.strip()]
 
     @property
     def models_root(self) -> Path:

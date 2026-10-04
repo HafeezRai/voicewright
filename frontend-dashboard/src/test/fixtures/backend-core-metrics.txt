@@ -1,0 +1,38 @@
+# HELP python_gc_objects_collected_total Objects collected during gc
+# TYPE python_gc_objects_collected_total counter
+python_gc_objects_collected_total{generation="0"} 462.0
+python_gc_objects_collected_total{generation="1"} 388.0
+python_gc_objects_collected_total{generation="2"} 0.0
+# HELP python_gc_objects_uncollectable_total Uncollectable objects found during GC
+# TYPE python_gc_objects_uncollectable_total counter
+python_gc_objects_uncollectable_total{generation="0"} 0.0
+python_gc_objects_uncollectable_total{generation="1"} 0.0
+python_gc_objects_uncollectable_total{generation="2"} 0.0
+# HELP python_gc_collections_total Number of times this generation was collected
+# TYPE python_gc_collections_total counter
+python_gc_collections_total{generation="0"} 209.0
+python_gc_collections_total{generation="1"} 19.0
+python_gc_collections_total{generation="2"} 1.0
+# HELP python_info Python platform information
+# TYPE python_info gauge
+python_info{implementation="CPython",major="3",minor="11",patchlevel="5",version="3.11.5"} 1.0
+# HELP cloudpso_active_webrtc_sessions Number of WebRTC peer sessions currently established.
+# TYPE cloudpso_active_webrtc_sessions gauge
+cloudpso_active_webrtc_sessions 1.0
+# HELP cloudpso_webrtc_sessions_total Total WebRTC peer sessions created since process start.
+# TYPE cloudpso_webrtc_sessions_total counter
+cloudpso_webrtc_sessions_total 1.0
+# HELP cloudpso_webrtc_sessions_created Total WebRTC peer sessions created since process start.
+# TYPE cloudpso_webrtc_sessions_created gauge
+cloudpso_webrtc_sessions_created 1.791111318580001e+09
+# HELP cloudpso_bargein_events_total Total barge-in (user interrupt) events emitted while the agent was speaking.
+# TYPE cloudpso_bargein_events_total counter
+cloudpso_bargein_events_total 0.0
+# HELP cloudpso_bargein_events_created Total barge-in (user interrupt) events emitted while the agent was speaking.
+# TYPE cloudpso_bargein_events_created gauge
+cloudpso_bargein_events_created 1.7911113185800068e+09
+# HELP cloudpso_vad_frames_processed_total Audio frames classified by the VAD, labelled by backend and decision.
+# TYPE cloudpso_vad_frames_processed_total counter
+# HELP cloudpso_signaling_connections Number of WebSocket signalling connections currently open.
+# TYPE cloudpso_signaling_connections gauge
+cloudpso_signaling_connections 1.0

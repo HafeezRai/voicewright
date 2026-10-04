@@ -31,6 +31,12 @@ npm-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
+# ---- Playwright (Phase 4 E2E) ----
+test-results/
+playwright-report/
+blob-report/
+.playwright/
+
 # ---- Environment files ----
 # Keep the template, ignore real secrets.
 .env

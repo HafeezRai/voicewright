@@ -1,25 +1,53 @@
+import { AgentTurnPanel } from "./components/AgentTurnPanel";
+import { DashboardPanel } from "./components/DashboardPanel";
+import { VoicePanel } from "./components/VoicePanel";
+import { config } from "./config";
+import { useMetrics } from "./hooks/useMetrics";
+import { useVoiceClient } from "./hooks/useVoiceClient";
+
 /**
- * Phase 1 placeholder. The real voice demo + observability dashboard is Phase 4.
- * This intentionally renders static markup and makes no network calls.
+ * CloudPSO Voice Agent dashboard (Phase 4).
+ *
+ * Two halves, deliberately side by side: the left drives a real browser voice
+ * session (mic -> WebRTC -> backend-core signalling) and the ai-engine turn
+ * endpoints; the right is a live observability view parsed straight from both
+ * services' Prometheus endpoints.
  */
 export default function App() {
+  const voice = useVoiceClient();
+  const metrics = useMetrics();
+
   return (
-    <main className="min-h-screen bg-cloudpso-bg text-slate-100 flex items-center justify-center p-8">
-      <section className="max-w-xl w-full rounded-2xl bg-cloudpso-panel p-8 shadow-lg">
-        <h1 className="text-2xl font-semibold text-cloudpso-accent">
-          CloudPSO Voice Agent
-        </h1>
-        <p className="mt-3 text-slate-300">
-          Frontend scaffold is in place. The live voice demo and observability
-          dashboard arrive in Phase 4.
-        </p>
-        <p className="mt-4 text-sm text-slate-400">
-          Backend endpoint:{" "}
-          <code className="rounded bg-black/30 px-1.5 py-0.5">
-            {import.meta.env.VITE_BACKEND_CORE_URL ?? "http://localhost:8000"}
-          </code>
-        </p>
-      </section>
-    </main>
+    <div className="min-h-screen bg-cloudpso-bg text-slate-100">
+      <header className="border-b border-cloudpso-line bg-cloudpso-panel/70 backdrop-blur">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-4">
+          <div>
+            <h1 className="text-xl font-semibold text-cloudpso-accent">CloudPSO Voice Agent</h1>
+            <p className="text-xs text-cloudpso-muted">
+              Phase 4 — browser WebRTC voice client + live observability
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-x-4 gap-y-1 font-mono text-[11px] text-cloudpso-muted">
+            <span title="backend-core base URL">backend {config.backendUrl}</span>
+            <span title="ai-engine base URL">ai {config.aiEngineUrl}</span>
+            <span title="signalling endpoint">{config.signalingUrl}</span>
+          </div>
+        </div>
+      </header>
+
+      <main className="mx-auto grid max-w-7xl gap-5 px-4 py-6 lg:grid-cols-2">
+        <div className="flex flex-col gap-5">
+          <VoicePanel voice={voice} />
+          <AgentTurnPanel onAgentSpeaking={voice.setAgentSpeaking} />
+        </div>
+        <DashboardPanel metrics={metrics} />
+      </main>
+
+      <footer className="mx-auto max-w-7xl px-4 pb-8 text-[11px] text-cloudpso-muted">
+        Media note: backend-core (Phase 2) is receive-only, so no remote agent audio
+        arrives over the peer connection — the agent's audible voice is synthesised
+        via ai-engine <code>/tts</code>.
+      </footer>
+    </div>
   );
 }

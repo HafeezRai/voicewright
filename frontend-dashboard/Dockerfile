@@ -16,7 +16,9 @@ COPY tsconfig.json tsconfig.node.json vite.config.ts tailwind.config.js postcss.
 COPY src ./src
 
 ARG VITE_BACKEND_CORE_URL=http://localhost:8000
+ARG VITE_AI_ENGINE_URL=http://localhost:8001
 ENV VITE_BACKEND_CORE_URL=${VITE_BACKEND_CORE_URL}
+ENV VITE_AI_ENGINE_URL=${VITE_AI_ENGINE_URL}
 RUN npm run build
 
 # --- stage 2: serve ---------------------------------------------------------

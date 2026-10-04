@@ -83,6 +83,16 @@ class Settings(BaseSettings):
     webrtc_stun_server: str = Field(default="", alias="BACKEND_CORE_WEBRTC_STUN_SERVER")
     grpc_enabled: bool = Field(default=True, alias="BACKEND_CORE_GRPC_ENABLED")
 
+    # --- Phase 4: CORS -------------------------------------------------------
+    # Comma-separated list of browser origins allowed to call the HTTP API. The
+    # default permits only the local dashboard; a deployment must set this
+    # explicitly. Deliberately never "*": a credential-less wildcard is one
+    # config typo away from exposing the service to any page a user visits.
+    cors_allow_origins: str = Field(
+        default="http://localhost:5173,http://127.0.0.1:5173",
+        alias="CLOUDEPSO_CORS_ALLOW_ORIGINS",
+    )
+
     @field_validator("log_level", mode="before")
     @classmethod
     def _normalise_log_level(cls, value: object) -> object:
@@ -92,6 +102,11 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.env == "production"
+
+    @property
+    def cors_origins(self) -> list[str]:
+        """Parsed CORS allow-list (comma-separated; blank entries dropped)."""
+        return [origin.strip() for origin in self.cors_allow_origins.split(",") if origin.strip()]
 
     @property
     def frame_duration_ms(self) -> int:

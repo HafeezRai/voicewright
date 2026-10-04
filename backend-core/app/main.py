@@ -15,6 +15,7 @@ from contextlib import asynccontextmanager
 
 import grpc
 from fastapi import FastAPI, Response
+from fastapi.middleware.cors import CORSMiddleware
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from app.audio.vad import build_vad
@@ -87,6 +88,18 @@ app = FastAPI(
 
 app.state.session_manager = session_manager
 app.include_router(signaling_router)
+
+# CORS for the Phase 4 browser dashboard. Additive and off the frozen contract:
+# origins come from CLOUDEPSO_CORS_ALLOW_ORIGINS and default to the local
+# dashboard only (never "*"). WebSockets are not subject to CORS, so /ws/signaling
+# is unaffected.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/health")
