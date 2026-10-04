@@ -11,11 +11,13 @@ It is a *static* check: it never starts a Triton server and cannot prove a model
 would load or serve correctly. What it proves is that the config is a valid
 ``ModelConfig`` and internally consistent.
 
-Run directly (a script puts its *own* directory on ``sys.path``, not its parent,
-so this does not shadow the real ``triton`` package -- see the note in
-``../tests/conftest.py``)::
+Run directly::
 
-    python mlops-pipeline/triton/validate_configs.py
+    python mlops-pipeline/triton_repo/validate_configs.py
+
+(The repository directory was renamed from ``triton/`` to ``triton_repo/`` so
+that nothing under ``mlops-pipeline/`` can shadow the real PyTorch ``triton``
+package when that directory is on ``sys.path``.)
 
 Exits non-zero if any config fails.
 """

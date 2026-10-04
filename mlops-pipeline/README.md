@@ -8,11 +8,11 @@ This is no longer a skeleton — it contains runnable tooling that has been run 
 whose results are reported below.
 
 ```
-ai-engine/models/            export/                          triton/
-  (checkpoints)     ──►        export_onnx.py       ──►        model_repository/
-                              parity.py                        <model>/config.pbtxt
-                              populate_triton_repo.py          <model>/1/<weights>
-                              verify_manifest.py
+ai-engine/models/          export/                          triton_repo/
+  (checkpoints)   ──►        export_onnx.py       ──►        model_repository/
+                            parity.py                        <model>/config.pbtxt
+                            populate_triton_repo.py          <model>/1/<weights>
+                            verify_manifest.py
 ```
 
 ## What is validated vs. what has been executed
@@ -27,8 +27,8 @@ here**, and no claim below says otherwise.
 | Numerical parity (MiniLM, Laya) | **EXECUTED** | PyTorch vs ONNX Runtime on real inputs; max-abs-diff 1.79e-05 / 2.16e-04 (see below) |
 | Piper ONNX determinism check | **EXECUTED** | Raw ONNX Runtime forward pass; determinism diff 0.0 |
 | STT CTranslate2 load + transcription | **EXECUTED** | `faster-whisper` transcribes `speech_16k.wav` → "percent global wealth." |
-| `triton/model_repository/*/config.pbtxt` | **STATICALLY VALIDATED** | Parsed against the real `triton.ModelConfig` protobuf + consistency checks (5/5 valid) |
-| `triton/docker-compose.triton.yml` | **STATICALLY VALIDATED** | `docker compose config` exits 0 |
+| `triton_repo/model_repository/*/config.pbtxt` | **STATICALLY VALIDATED** | Parsed against the real `triton.ModelConfig` protobuf + consistency checks (5/5 valid) |
+| `triton_repo/docker-compose.triton.yml` | **STATICALLY VALIDATED** | `docker compose config` exits 0 |
 | **Triton Inference Server itself** | **NEVER RUN** | No NVIDIA GPU on this host; `nvcr.io/nvidia/tritonserver` cannot start here |
 | `tts_frontend/1/model.py` (python backend) | **NOT EXECUTED** | Reference implementation; needs an espeak-ng phonemiser that is not installed here |
 
@@ -44,9 +44,9 @@ a Triton server.
 | `export/parity.py` | PyTorch↔ONNX Runtime numerical-parity harness |
 | `export/populate_triton_repo.py` | Copy artifacts into `<model>/1/` version dirs |
 | `export/verify_manifest.py` | Re-hash artifacts and compare against the manifest (CI gate) |
-| `triton/model_repository/` | One `<model>/config.pbtxt` per model |
-| `triton/validate_configs.py` | Parse every config against Triton's protobuf schema |
-| `triton/docker-compose.triton.yml` | GPU deployment of Triton (documentation; not run here) |
+| `triton_repo/model_repository/` | One `<model>/config.pbtxt` per model |
+| `triton_repo/validate_configs.py` | Parse every config against Triton's protobuf schema |
+| `triton_repo/docker-compose.triton.yml` | GPU deployment of Triton (documentation; not run here) |
 | `configs/models.yaml` | Stage → artifact → Triton-model mapping |
 | `configs/promotion.yaml` | CI promotion gates (staging → production) |
 | `tests/` | Export-parity and Triton-config tests |
@@ -105,22 +105,25 @@ declare a dead output that the server allocates on every request.
 `export_minilm` now wraps the backbone to return only `last_hidden_state`, so the
 graph boundary matches what the service actually consumes.
 
-## ⚠️ A real footgun: `triton/` shadows the `triton` package
+## ⚠️ Fixed footgun: a `triton/` directory shadows the `triton` package
 
-`mlops-pipeline/triton/` is a directory named `triton`. If `mlops-pipeline/` is
-put on `sys.path` — which `python -m pytest` does when the working directory is
-`mlops-pipeline/` — then `import triton` resolves to this directory instead of the
-real PyTorch Triton package. `torch._dynamo` imports `triton.language` during
-`import torch`, so the shadowing surfaces as:
+This directory previously *was* named `triton`. A directory named `triton` on
+`sys.path` — which `python -m pytest` does when the working directory is this one
+— makes `import triton` resolve to it instead of the real PyTorch Triton package.
+Because the import *succeeds* (as an empty namespace package), the guarded
+`triton.language` import inside `torch._dynamo` then blows up, and the failure
+surfaces as:
 
 ```
 ImportError: cannot import name 'GenerationMixin' from 'transformers.generation'
 ```
 
-which is a maddening error for a missing GPU kernel. **Always run these tools by
-path from the repository root** (`python mlops-pipeline/export/export_onnx.py`,
-`python -m pytest mlops-pipeline/tests/`), which is what the `Makefile` and the
-CI workflow do, and what `tests/conftest.py` arranges.
+a maddening error that points at `transformers`, not `triton`, and silently turned
+the ONNX parity tests into skips. The directory is now `triton_repo/`, so nothing
+under `mlops-pipeline/` can shadow `triton` and the tools run correctly from any
+working directory. `tests/test_export_parity.py` additionally now *fails* (rather
+than skips) on an unexpected export failure, so a regression of this kind cannot
+hide behind a skip again.
 
 ## Running it
 
@@ -136,7 +139,7 @@ ai-engine/.venv/bin/python mlops-pipeline/export/export_onnx.py --model minilm  
 ai-engine/.venv/bin/python -m pytest -o addopts="" -s mlops-pipeline/tests/test_export_parity.py
 
 # 3. validate the Triton configs against the real schema
-ai-engine/.venv/bin/python mlops-pipeline/triton/validate_configs.py
+ai-engine/.venv/bin/python mlops-pipeline/triton_repo/validate_configs.py
 
 # 4. verify artifacts against the manifest
 ai-engine/.venv/bin/python mlops-pipeline/export/verify_manifest.py
@@ -153,7 +156,7 @@ Or `make -C mlops-pipeline help`.
 ```bash
 python mlops-pipeline/export/export_onnx.py --model all
 python mlops-pipeline/export/populate_triton_repo.py
-docker compose -f mlops-pipeline/triton/docker-compose.triton.yml up
+docker compose -f mlops-pipeline/triton_repo/docker-compose.triton.yml up
 ```
 
 `config.pbtxt` for `whisper_ct2` follows the Whisper-supporting CTranslate2

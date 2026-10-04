@@ -30,9 +30,9 @@ Everything here is offline-first: model directories are resolved from the
 ai-engine model cache and HuggingFace is pinned to ``local_files_only`` so an
 export run cannot silently depend on the network.
 
-Run it (invoke by path -- *not* ``python -m`` from ``mlops-pipeline/``, because
-that directory contains ``triton/`` and would shadow the real ``triton`` package
-that ``import torch`` needs; see ``tests/conftest.py``)::
+Run it (works from anywhere; the ``mlops-pipeline`` package no longer contains a
+directory named ``triton`` -- it is ``triton_repo/`` -- so it cannot shadow the
+real PyTorch ``triton`` package that ``import torch`` needs)::
 
     python mlops-pipeline/export/export_onnx.py --model all
     python mlops-pipeline/export/export_onnx.py --model minilm laya

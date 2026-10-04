@@ -5,10 +5,10 @@ protobuf and assert the repository is internally consistent. They are STATIC
 validation: no Triton server is started (this host has no NVIDIA GPU, so it
 cannot run one) and these tests do not claim a model would serve correctly.
 
-The validator lives at ``mlops-pipeline/triton/validate_configs.py`` and is
-loaded *by file path* rather than as ``triton.validate_configs``: putting
-``mlops-pipeline/`` on ``sys.path`` would shadow the real ``triton`` package
-that ``import torch`` needs. See ``conftest.py``.
+The validator lives at ``mlops-pipeline/triton_repo/validate_configs.py`` and is
+loaded *by file path* rather than as ``triton_repo.validate_configs``: it is a
+standalone script, not an importable package, and loading it by path keeps the
+tests independent of whatever else is on ``sys.path``. See ``conftest.py``.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from pathlib import Path
 import pytest
 from google.protobuf import text_format
 
-_VALIDATOR_PATH = Path(__file__).resolve().parents[1] / "triton" / "validate_configs.py"
+_VALIDATOR_PATH = Path(__file__).resolve().parents[1] / "triton_repo" / "validate_configs.py"
 
 
 def _load_validator():
@@ -78,7 +78,7 @@ def test_onnx_models_declare_dynamic_batching_or_explain_why_not():
 
 def test_validation_catches_a_malformed_config(tmp_path):
     """A config with a name/dir mismatch must be rejected (Triton fails silently)."""
-    bad_dir = tmp_path / "triton_broken"
+    bad_dir = tmp_path / "broken_repo"
     bad_dir.mkdir()
     (bad_dir / "config.pbtxt").write_text('name: "not_the_dir_name"\nbackend: "onnxruntime"\n')
     result = validate_configs.validate_one(bad_dir / "config.pbtxt")
@@ -87,10 +87,10 @@ def test_validation_catches_a_malformed_config(tmp_path):
 
 
 def test_validation_catches_dynamic_batching_with_zero_batch(tmp_path):
-    bad_dir = tmp_path / "triton_broken2"
+    bad_dir = tmp_path / "broken_repo2"
     bad_dir.mkdir()
     (bad_dir / "config.pbtxt").write_text(
-        'name: "triton_broken2"\n'
+        'name: "broken_repo2"\n'
         'backend: "onnxruntime"\n'
         "max_batch_size: 0\n"
         'input [{ name: "x" data_type: TYPE_FP32 dims: [ -1 ] }]\n'

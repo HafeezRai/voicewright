@@ -1,14 +1,16 @@
 # Phase 5 tooling — export, parity, Triton config validation.
 #
-# WHY EVERY TARGET `cd`s TO THE REPO ROOT FIRST:
-# this repository contains `mlops-pipeline/triton/`. Running `python -m pytest`
-# (or any `python -m ...`) with the working directory set to `mlops-pipeline/`
-# puts that directory on `sys.path`, so `import triton` resolves to our config
-# directory instead of the real PyTorch Triton package. `torch._dynamo` imports
-# `triton.language` during `import torch`, so the shadowing surfaces as a
-# baffling `ImportError: cannot import name 'GenerationMixin' from
-# 'transformers.generation'`. Running from the repo root avoids it entirely.
-# See tests/conftest.py for the full explanation.
+# Every target runs from the repository root, which is the canonical invocation
+# for these tools (their paths and the committed manifest are all relative to the
+# repo root).
+#
+# NOTE: the Triton model repository used to live in a directory named `triton`.
+# A directory named `triton` on `sys.path` shadows the real PyTorch `triton`
+# package — and because `import triton` then *succeeds* (as an empty namespace
+# package) the guarded `triton.language` import inside `torch._dynamo` blew up,
+# surfacing as a misleading
+# `ImportError: cannot import name 'GenerationMixin' from 'transformers.generation'`.
+# It is now `mlops-pipeline/triton_repo/`, so running from anywhere is safe.
 
 REPO   := $(abspath ..)
 PYTHON := $(REPO)/ai-engine/.venv/bin/python
@@ -29,7 +31,7 @@ parity: ## Run the numerical-parity tests and print the real max-abs-diff number
 	  $(PYTHON) -m pytest -o addopts="" -p no:warnings -s mlops-pipeline/tests/test_export_parity.py
 
 validate: ## Validate every config.pbtxt against Triton's ModelConfig protobuf
-	cd $(REPO) && $(PYTHON) mlops-pipeline/triton/validate_configs.py
+	cd $(REPO) && $(PYTHON) mlops-pipeline/triton_repo/validate_configs.py
 
 verify-manifest: ## Re-hash artifacts and compare against manifest.json
 	cd $(REPO) && $(PYTHON) mlops-pipeline/export/verify_manifest.py

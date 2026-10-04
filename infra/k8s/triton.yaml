@@ -1,7 +1,7 @@
 # Triton Inference Server (OPTIONAL).
 #
 # This is the GPU serving path for the ONNX/CTranslate2 artifacts in
-# mlops-pipeline/triton/model_repository. It is deployed to a node pool with
+# mlops-pipeline/triton_repo/model_repository. It is deployed to a node pool with
 # GPUs; the ai-engine's in-process engines remain the default path, so this
 # workload can be omitted entirely (delete this file from kustomization.yaml)
 # without breaking the stack.

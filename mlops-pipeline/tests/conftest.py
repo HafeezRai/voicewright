@@ -1,21 +1,21 @@
-"""Make the export modules importable without shadowing third-party packages.
+"""Make the export/parity modules importable from the tests.
 
-IMPORTANT — why this adds ``export/`` and not ``mlops-pipeline/``:
+``export_onnx`` and ``parity`` live in ``mlops-pipeline/export/`` and are
+imported by name, so that directory is added to ``sys.path``.
 
-``mlops-pipeline/triton/`` is a *directory named ``triton``*. If
-``mlops-pipeline`` were placed on ``sys.path``, ``import triton`` would resolve to
-that directory (as an implicit namespace package) instead of the real PyTorch
-Triton package. ``torch._dynamo`` imports ``triton.language`` unconditionally
-during ``import torch``, so the shadowing raises
-``AttributeError: module 'triton' has no attribute 'language'`` deep inside
-``torch._dynamo`` -- which surfaces, confusingly, as
-``ImportError: cannot import name 'GenerationMixin' from 'transformers.generation'``.
+This conftest deliberately adds ``export/`` rather than ``mlops-pipeline/``
+itself. The tests are run both from the repository root and from inside
+``mlops-pipeline/`` (e.g. ``cd mlops-pipeline && python -m pytest``), and the
+latter puts ``mlops-pipeline/`` on ``sys.path``. Adding ``export/`` keeps the
+imports working either way without widening what is importable.
 
-Adding only ``mlops-pipeline/export`` keeps the export/parity modules importable
-while leaving ``triton`` unshadowed. The Triton config validator is loaded by
-file path for the same reason (see ``test_triton_configs.py``); running it
-directly (``python mlops-pipeline/triton/validate_configs.py``) is also safe,
-because a script puts *its own* directory -- not its parent -- on ``sys.path``.
+The Triton model repository is *not* importable code and intentionally no
+longer lives in a directory named ``triton`` -- it is ``triton_repo/`` -- so that
+nothing in this package can shadow the real PyTorch ``triton`` package (a
+namespace package with no ``language`` attribute breaks the *guarded* import
+inside ``torch._dynamo``, surfacing as a misleading
+``ImportError: cannot import name 'GenerationMixin' from 'transformers.generation'``).
+See ``test_triton_configs.py`` for how the validator is loaded by file path.
 """
 
 from __future__ import annotations

@@ -44,7 +44,7 @@ scrape_configs:
           service: ai-engine
 
   # Triton inference server (OPTIONAL — only when the GPU serving path is up; see
-  # mlops-pipeline/triton/docker-compose.triton.yml). Down by default in the local
+  # mlops-pipeline/triton_repo/docker-compose.triton.yml). Down by default in the local
   # stack, which surfaces as `up{job="triton"} == 0` rather than an error, and is
   # excluded from CloudPSOServiceDown. Triton's own metrics are not cloudpso_*;
   # no alert in rules/ depends on them.

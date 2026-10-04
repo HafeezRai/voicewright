@@ -7,7 +7,7 @@
 # (b) a BLS/ensemble that calls this then `piper_tts`. This model is (a).
 #
 # STATUS: STATICALLY VALIDATED ONLY. The config parses against Triton's
-# ModelConfig schema (see mlops-pipeline/triton/validate_configs.py). The
+# ModelConfig schema (see mlops-pipeline/triton_repo/validate_configs.py). The
 # reference `1/model.py` was NOT executed on this host — the espeak-ng python
 # binding it depends on is not installed in the verification environment, and no
 # Triton server was run.

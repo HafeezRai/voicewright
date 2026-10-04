@@ -20,7 +20,7 @@ gates:
     description: >-
       Every config.pbtxt must parse against Triton's ModelConfig protobuf and be
       internally consistent (max_batch_size vs dynamic_batching, name == dir).
-    command: python mlops-pipeline/triton/validate_configs.py
+    command: python mlops-pipeline/triton_repo/validate_configs.py
     required: true
     blocks: [production]
 

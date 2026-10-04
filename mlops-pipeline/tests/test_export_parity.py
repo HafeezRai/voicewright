@@ -13,6 +13,7 @@ Heavy models:
 
 from __future__ import annotations
 
+import importlib
 import os
 
 import pytest
@@ -22,16 +23,73 @@ import parity
 
 _SKIP_HEAVY = os.environ.get("CLOUDEPSO_SKIP_HEAVY_ONNX") == "1"
 
+#: Third-party modules the export path imports. If any is missing the host
+#: genuinely cannot export -- that is a legitimate skip, and we name the module.
+_EXPORT_DEPS = ("torch", "transformers", "safetensors", "onnxruntime", "onnx")
+
+
+def _missing_export_deps() -> list[str]:
+    missing: list[str] = []
+    for name in _EXPORT_DEPS:
+        try:
+            importlib.import_module(name)
+        except Exception as exc:  # noqa: BLE001 - report every missing dep, don't stop at the first
+            missing.append(f"{name} ({type(exc).__name__}: {exc})")
+    return missing
+
+
+def _missing_model_sources(models_root) -> list[str]:
+    """Checkpoints the exporters read; absent means ``fetch_models.sh`` was never run."""
+    missing: list[str] = []
+    for repo in (export_onnx.MINILM_REPO, export_onnx.LAYA_REPO, export_onnx.WHISPER_CT2_REPO):
+        try:
+            export_onnx._snapshot(models_root, repo)
+        except FileNotFoundError:
+            missing.append(repo)
+    voice = models_root / "tts" / export_onnx.PIPER_VOICE_DIRNAME
+    if not sorted(voice.glob("*.onnx")):
+        missing.append(f"tts/{export_onnx.PIPER_VOICE_DIRNAME}/*.onnx")
+    return missing
+
 
 @pytest.fixture(scope="session")
 def artifacts_dir():
-    """Export every model once per session and reuse the artifacts."""
+    """Export every model once per session and reuse the artifacts.
+
+    This skips ONLY for a genuine host limitation, and says which one:
+
+    * a missing export dependency (torch/transformers/onnxruntime/...), or
+    * a checkpoint that was never fetched into the ai-engine cache.
+
+    Any *other* export failure -- i.e. one that happens with every dependency
+    installed and every checkpoint present -- is a bug in our own export
+    tooling, so it FAILS the run loudly. Collapsing all failures into one
+    ``if failed: skip`` is what once let a module-shadowing bug hide behind the
+    innocent-looking message "export(s) unavailable on this host".
+    """
+    models_root = export_onnx.DEFAULT_MODELS_ROOT
     out = export_onnx.DEFAULT_ARTIFACTS_DIR
-    results = export_onnx.run(list(export_onnx.EXPORTERS), export_onnx.DEFAULT_MODELS_ROOT, out)
+
+    missing_deps = _missing_export_deps()
+    if missing_deps:
+        pytest.skip("export dependencies not installed in this interpreter: " + ", ".join(missing_deps))
+
+    missing_sources = _missing_model_sources(models_root)
+    if missing_sources:
+        pytest.skip(
+            "model checkpoints absent from the ai-engine cache "
+            "(run ai-engine/scripts/fetch_models.sh): " + ", ".join(missing_sources)
+        )
+
+    results = export_onnx.run(list(export_onnx.EXPORTERS), models_root, out)
     by_model = {r.model: r for r in results}
-    failed = [r.model for r in results if r.status == "failed"]
+    failed = [r for r in results if r.status == "failed"]
     if failed:
-        pytest.skip(f"export(s) unavailable on this host: {failed}")
+        detail = "\n  ".join(f"{r.model}: {r.notes}" for r in failed)
+        pytest.fail(
+            "export failed even though every dependency and checkpoint is present -- "
+            "this is a bug in the export tooling, not a host limitation:\n  " + detail
+        )
     return out, by_model
 
 

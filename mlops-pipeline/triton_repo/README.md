@@ -1,4 +1,4 @@
-# mlops-pipeline/triton
+# mlops-pipeline/triton_repo
 
 The Triton Inference Server model repository.
 
@@ -21,7 +21,7 @@ Each `<model>/` holds a committed `config.pbtxt`; the weights live in
 reports only the `runc` runtime, no `nvidia`). What *has* been done:
 
 ```bash
-python mlops-pipeline/triton/validate_configs.py
+python mlops-pipeline/triton_repo/validate_configs.py
 #   OK  laya_encoder / minilm_nlu / piper_tts / tts_frontend / whisper_ct2
 #   5/5 configs valid
 ```
@@ -46,7 +46,7 @@ ONNX would discard the int8 quantisation. See `../README.md`.
 ```bash
 python mlops-pipeline/export/export_onnx.py --model all
 python mlops-pipeline/export/populate_triton_repo.py
-docker compose -f mlops-pipeline/triton/docker-compose.triton.yml up
+docker compose -f mlops-pipeline/triton_repo/docker-compose.triton.yml up
 ```
 
 `docker-compose.triton.yml` uses `--strict-model-config=true` so a bad config

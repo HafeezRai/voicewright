@@ -31,7 +31,7 @@ from export_onnx import (
     WHISPER_CT2_REPO,
 )
 
-TRITON_REPO = Path(__file__).resolve().parents[1] / "triton" / "model_repository"
+TRITON_REPO = Path(__file__).resolve().parents[1] / "triton_repo" / "model_repository"
 
 
 def _ensure_clean_version_dir(model: str) -> Path:

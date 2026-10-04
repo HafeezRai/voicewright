@@ -117,7 +117,7 @@ jobs:
       - name: Export parity + Triton config validation
         run: python -m pytest -o addopts="" -p no:warnings mlops-pipeline/tests/
       - name: Validate config.pbtxt against the Triton schema
-        run: python mlops-pipeline/triton/validate_configs.py
+        run: python mlops-pipeline/triton_repo/validate_configs.py
       - name: Verify artifact checksums against the manifest
         run: python mlops-pipeline/export/verify_manifest.py
 
@@ -167,7 +167,7 @@ jobs:
       - name: Validate compose files
         run: |
           docker compose config >/dev/null
-          docker compose -f mlops-pipeline/triton/docker-compose.triton.yml config >/dev/null
+          docker compose -f mlops-pipeline/triton_repo/docker-compose.triton.yml config >/dev/null
 
   observability:
     name: dashboards + alert rules reference real metrics
