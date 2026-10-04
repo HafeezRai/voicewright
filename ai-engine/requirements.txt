@@ -1,21 +1,38 @@
-# Runtime dependencies for ai-engine.
+# Runtime dependencies for ai-engine (Phase 3: the real STT -> NLU -> TTS stack).
 # Mirrors [project].dependencies in pyproject.toml; used by the Dockerfile.
 #
-# NOTE: torch / transformers / onnxruntime / aiortc / av / silero-vad are HEAVY
-# (multi-GB with CUDA). They are declared here because Phase 3 needs them, but
-# the Phase 1 application code never imports them at module import time — see
-# app/config.py and app/main.py. Use requirements-dev.txt to run the tests
-# without pulling the ML stack.
+# Version floors are the ones actually verified on this machine (see
+# README.md "Verified versions"); ceilings are the next major, so a breaking
+# release cannot land silently.
+#
+# NOTE ON SIZE: torch+transformers are only needed by the Laya NLU backend and
+# its HuggingFace fallback. The Dockerfile installs CPU-only torch from the
+# PyTorch CPU index to keep the image from pulling multi-GB CUDA libraries.
+
+# --- web / serving -----------------------------------------------------------
 fastapi>=0.110,<1.0
 uvicorn[standard]>=0.29,<1.0
 pydantic>=2.6,<3.0
 pydantic-settings>=2.2,<3.0
 python-dotenv>=1.0,<2.0
+prometheus-client>=0.20,<1.0
 
+# --- gRPC (VoiceGateway contract; stubs are committed, so this is runtime only)
+grpcio>=1.60,<2.0
+
+# --- audio -------------------------------------------------------------------
+numpy>=1.26,<3.0
+soundfile>=0.12,<1.0
+
+# --- STT: Whisper over CTranslate2 (no torch in the path) --------------------
+faster-whisper>=1.0,<2.0
+
+# --- TTS: Piper/VITS voices over ONNX Runtime --------------------------------
+# Apache-2.0 (piper-tts 1.8 is GPL-3.0-or-later and was rejected on licence).
+sherpa-onnx>=1.10,<2.0
+
+# --- NLU: Laya decision engine + HuggingFace embedding fallback --------------
 torch>=2.2,<3.0
-transformers>=4.40,<5.0
-onnxruntime>=1.17,<2.0
-
-aiortc>=1.9,<2.0
-av>=12.0,<14.0
-silero-vad>=5.0,<6.0
+transformers>=4.48,<5.0
+safetensors>=0.4,<1.0
+laya>=0.3.3,<0.4

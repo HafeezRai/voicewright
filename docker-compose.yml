@@ -47,8 +47,16 @@ services:
       # Fixed in-container bind port; AI_ENGINE_PORT in .env sets the host port.
       AI_ENGINE_PORT: "8001"
       AI_ENGINE_MODEL_CACHE: ${AI_ENGINE_MODEL_CACHE:-/models}
+      # Phase 3: pipeline backends and the gRPC VoiceGateway port.
+      AI_ENGINE_DEVICE: ${AI_ENGINE_DEVICE:-cpu}
+      AI_ENGINE_NLU_BACKEND: ${AI_ENGINE_NLU_BACKEND:-auto}
+      AI_ENGINE_STT_MODEL: ${AI_ENGINE_STT_MODEL:-base.en}
+      AI_ENGINE_TTS_MODEL: ${AI_ENGINE_TTS_MODEL:-vits-piper-en_US-amy-low}
+      AI_ENGINE_GRPC_ENABLED: ${AI_ENGINE_GRPC_ENABLED:-true}
+      AI_ENGINE_GRPC_PORT: "50052"
     ports:
       - "${AI_ENGINE_PORT:-8001}:8001"
+      - "${AI_ENGINE_GRPC_PORT:-50052}:50052"
     volumes:
       # Named volume keeps downloaded weights out of the git tree.
       - ai-engine-models:${AI_ENGINE_MODEL_CACHE:-/models}
