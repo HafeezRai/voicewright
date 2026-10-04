@@ -61,7 +61,8 @@ def test_settings_load_defaults_with_empty_env(monkeypatch: pytest.MonkeyPatch) 
     assert settings.host == "0.0.0.0"
     assert settings.port == 8001
     assert settings.model_cache == "/models"
-    assert settings.device == "cpu"
+    # The unset default auto-detects: MPS on Apple Silicon, CPU otherwise.
+    assert settings.device in {"mps", "cpu"}
     assert settings.vad_threshold == 0.5
     assert settings.sample_rate_hz == 16000
 

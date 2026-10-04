@@ -69,6 +69,40 @@ def test_mps_is_an_accepted_device(clean_env) -> None:
     assert Settings().device == "mps"
 
 
+def _mps_available() -> bool:
+    """Mirror of the production probe, so the test agrees with the code."""
+    try:
+        import torch
+
+        return bool(torch.backends.mps.is_available())
+    except Exception:  # pragma: no cover - torch absent on a slim CI image
+        return False
+
+
+def test_unset_device_auto_detects(clean_env) -> None:
+    """No AI_ENGINE_DEVICE -> best available runtime, without raising.
+
+    Written to pass on every host: MPS where torch reports it (this Apple
+    Silicon machine), CPU on Linux CI / containers / Intel Macs.
+    """
+    device = Settings().device
+    assert device in {"mps", "cpu"}
+    assert device == ("mps" if _mps_available() else "cpu")
+
+
+def test_auto_device_is_equivalent_to_unset(clean_env) -> None:
+    clean_env.setenv("AI_ENGINE_DEVICE", "auto")
+    assert Settings().device in {"mps", "cpu"}
+
+
+def test_explicit_device_beats_auto_detection(clean_env) -> None:
+    """An explicit cpu/mps must win over detection, whatever the host offers."""
+    clean_env.setenv("AI_ENGINE_DEVICE", "cpu")
+    assert Settings().device == "cpu"
+    clean_env.setenv("AI_ENGINE_DEVICE", "mps")
+    assert Settings().device == "mps"
+
+
 def test_tts_speed_is_bounded(clean_env) -> None:
     clean_env.setenv("AI_ENGINE_TTS_SPEED", "0")
     with pytest.raises(Exception):

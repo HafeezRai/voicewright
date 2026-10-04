@@ -7,9 +7,11 @@ Phase 1 declared the model/VAD fields so downstream phases had one place to read
 them from. Phase 3 fills those fields in with the *real* STT/NLU/TTS stack and
 adds the knobs the pipeline needs (backend selection, compute type, gRPC port).
 
-Nothing here imports an ML runtime: the model names below are plain strings that
-are only resolved to weights when an engine is first used (see
-``app/stt``, ``app/nlu``, ``app/tts``).
+Nothing here imports an ML runtime at import time: the model names below are
+plain strings that are only resolved to weights when an engine is first used (see
+``app/stt``, ``app/nlu``, ``app/tts``). Device auto-detection probes torch, and
+does so lazily -- inside the ``device`` field validator, only when settings are
+constructed, and never fatally (see :func:`_auto_device`).
 """
 
 from __future__ import annotations
@@ -24,7 +26,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 Environment = Literal["development", "staging", "production"]
-Device = Literal["cpu", "cuda", "mps"]
+# `auto` (the default) is resolved to a concrete runtime device at load time by
+# `_normalise_device`: MPS where torch reports it, otherwise CPU.
+Device = Literal["auto", "cpu", "cuda", "mps"]
 STTBackend = Literal["faster-whisper"]
 TTSBackend = Literal["sherpa"]
 # `auto` prefers Laya and falls back to the HuggingFace classifier if Laya is
@@ -35,6 +39,24 @@ NLUBackend = Literal["auto", "laya", "hf"]
 #: model cache is absent or not writable -- the common case on a dev laptop,
 #: where the container path ``/models`` does not exist.
 _LOCAL_MODELS_DIRNAME = "models"
+
+
+def _auto_device() -> Device:
+    """Pick the fastest device available when none is configured explicitly.
+
+    Apple Silicon's MPS backend when torch reports it usable, otherwise CPU.
+    torch is imported lazily and the probe is fully guarded: an absent or broken
+    torch (a slim container, an odd wheel) must degrade silently to ``"cpu"``
+    rather than stop the settings -- and therefore the service -- from loading.
+    """
+    try:
+        import torch
+
+        if torch.backends.mps.is_available():
+            return "mps"
+    except Exception:  # pragma: no cover - torch absent or misconfigured
+        pass
+    return "cpu"
 
 
 class Settings(BaseSettings):
@@ -67,7 +89,9 @@ class Settings(BaseSettings):
     #: When true (default) weights are loaded on first use, so the process -- and
     #: ``GET /health`` -- starts without downloading or allocating any model.
     lazy_models: bool = Field(default=True, alias="AI_ENGINE_LAZY_MODELS")
-    device: Device = Field(default="cpu", alias="AI_ENGINE_DEVICE")
+    #: ``auto`` (default) -> MPS on Apple Silicon, CPU elsewhere; an explicit
+    #: ``cpu``/``cuda``/``mps`` always wins. See :func:`_auto_device`.
+    device: Device = Field(default="auto", alias="AI_ENGINE_DEVICE")
 
     # --- STT --------------------------------------------------------------
     stt_backend: STTBackend = Field(default="faster-whisper", alias="AI_ENGINE_STT_BACKEND")
@@ -109,7 +133,13 @@ class Settings(BaseSettings):
     @field_validator("device", mode="before")
     @classmethod
     def _normalise_device(cls, value: object) -> object:
-        return value.lower() if isinstance(value, str) else value
+        if isinstance(value, str):
+            normalised = value.lower()
+            # `auto` (also the field default) is resolved here, so the stored
+            # value is always a concrete device and an explicit choice is never
+            # overridden by detection.
+            return _auto_device() if normalised == "auto" else normalised
+        return value
 
     @field_validator("nlu_backend", "stt_backend", "tts_backend", mode="before")
     @classmethod
