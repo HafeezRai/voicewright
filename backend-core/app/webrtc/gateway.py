@@ -31,6 +31,7 @@ from aiortc import (
     RTCPeerConnection,
     RTCSessionDescription,
 )
+from aiortc.sdp import candidate_from_sdp, candidate_to_sdp
 
 logger = logging.getLogger(__name__)
 
@@ -52,14 +53,24 @@ class WebRTCSessionState(str, Enum):
 
 
 def _candidate_to_dict(candidate: RTCIceCandidate) -> dict:
-    """Serialise an aiortc candidate, tolerating the sdpMid/sdp_mid rename."""
+    """Serialise an aiortc candidate to a browser-style ICE init dict.
+
+    aiortc >= 1.10 models :class:`RTCIceCandidate` as a plain dataclass with no
+    ``candidate`` attribute, so the SDP attribute string is rebuilt with
+    :func:`aiortc.sdp.candidate_to_sdp` and given the ``candidate:`` prefix that
+    browsers expect in an ``RTCIceCandidateInit``.
+    """
     sdp_mid = getattr(candidate, "sdpMid", None)
     if sdp_mid is None:
         sdp_mid = getattr(candidate, "sdp_mid", None)
     mline = getattr(candidate, "sdpMLineIndex", None)
     if mline is None:
         mline = getattr(candidate, "sdp_mline_index", None)
-    return {"candidate": candidate.candidate, "sdpMid": sdp_mid, "sdpMLineIndex": mline}
+    return {
+        "candidate": "candidate:" + candidate_to_sdp(candidate),
+        "sdpMid": sdp_mid,
+        "sdpMLineIndex": mline,
+    }
 
 
 class WebRTCSession:
@@ -123,16 +134,37 @@ class WebRTCSession:
         return self.pc.localDescription or answer
 
     async def add_ice_candidate(self, candidate: dict | None) -> None:
-        """Add a remote ICE candidate. ``None``/empty signals end-of-candidates."""
+        """Add a remote ICE candidate. ``None``/empty signals end-of-candidates.
+
+        Accepts a browser-style ``RTCIceCandidateInit`` dict::
+
+            {"candidate": "candidate:...", "sdpMid": "0", "sdpMLineIndex": 0}
+
+        aiortc >= 1.10 dropped the ``candidate=`` kwarg from
+        :class:`RTCIceCandidate.__init__` — it is now a dataclass parsed from the
+        bare SDP attribute value — so the string is turned into an object with
+        :func:`aiortc.sdp.candidate_from_sdp`.
+        """
         if not candidate or not candidate.get("candidate"):
             return
-        await self.pc.addIceCandidate(
-            RTCIceCandidate(
-                candidate=candidate["candidate"],
-                sdpMid=candidate.get("sdpMid"),
-                sdpMLineIndex=candidate.get("sdpMLineIndex"),
-            )
-        )
+        raw = candidate["candidate"]
+        # Browser candidates carry a "candidate:" prefix; aiortc's parser wants
+        # the bare SDP attribute ("<foundation> <component> <proto> ...").
+        sdp = raw[len("candidate:") :] if raw.startswith("candidate:") else raw
+        ice = candidate_from_sdp(sdp)
+        # aiortc matches the candidate to a transceiver by sdpMid, and rejects a
+        # candidate with neither sdpMid nor sdpMLineIndex set. Carry both across
+        # from the incoming dict when the browser supplied them.
+        sdp_mid = candidate.get("sdpMid")
+        if sdp_mid is not None:
+            ice.sdpMid = sdp_mid
+        mline = candidate.get("sdpMLineIndex")
+        if mline is not None:
+            ice.sdpMLineIndex = mline
+        if ice.sdpMid is None and ice.sdpMLineIndex is None:
+            logger.debug("dropping ICE candidate with no sdpMid/sdpMLineIndex: %r", raw)
+            return
+        await self.pc.addIceCandidate(ice)
 
     async def close(self) -> None:
         """Close the connection and cancel every consumer task (no leaks)."""

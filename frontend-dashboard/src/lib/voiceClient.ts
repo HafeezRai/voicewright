@@ -135,14 +135,13 @@ export class VoiceClient {
   private attachPeerHandlers(pc: RTCPeerConnection): void {
     // NOTE — vanilla ICE, deliberately.
     //
-    // We do *not* trickle candidates to backend-core. Its
-    // `WebRTCSession.add_ice_candidate` constructs `RTCIceCandidate(candidate=…)`,
-    // which aiortc >= 1.10 rejects with `TypeError: unexpected keyword argument
-    // 'candidate'`; the exception escapes the signalling handler and the session
-    // is torn down. That is a Phase 2 defect, out of scope for this phase, so the
-    // client instead gathers fully and carries its candidates in the offer SDP.
-    // Once the server is fixed, switching back to trickle is a two-line change
-    // (re-add an `onicecandidate` send here and drop the gather wait below).
+    // The client gathers fully and carries its candidates in the offer SDP
+    // rather than trickling them. backend-core *does* now accept trickled
+    // candidates (`WebRTCSession.add_ice_candidate` parses the browser string
+    // with aiortc's `candidate_from_sdp`), but the server side of aiortc 1.10
+    // never emits an `icecandidate` event — it gathers candidates inline into
+    // its answer SDP — so a symmetric trickle can never be established. Vanilla
+    // ICE is therefore the supported design here, not a workaround.
     pc.onconnectionstatechange = () => {
       this.dispatch({ type: "ice", state: ICE_MAP[pc.connectionState] ?? "none" });
     };

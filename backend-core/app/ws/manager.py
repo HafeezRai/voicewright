@@ -17,10 +17,16 @@ from collections.abc import Callable
 from app.audio.vad import VAD
 from app.metrics import (
     ACTIVE_WEBRTC_SESSIONS,
+    BARGEIN_EVENTS,
     TOTAL_WEBRTC_SESSIONS,
     VAD_FRAMES_PROCESSED,
 )
-from app.pipeline.bargein import BargeInController, BargeInEvent, StubPlaybackSink
+from app.pipeline.bargein import (
+    BargeInController,
+    BargeInEvent,
+    BargeInEventKind,
+    StubPlaybackSink,
+)
 from app.webrtc.gateway import WebRTCSession, WebRTCSessionState
 
 logger = logging.getLogger(__name__)
@@ -74,6 +80,10 @@ class VoiceSession:
         speech = self.vad.is_speech(frame)
         VAD_FRAMES_PROCESSED.labels(backend=self.vad.backend_name, speech=str(speech)).inc()
         for event in self.bargein.process(speech):
+            # Count the interrupt exactly where the controller fires it: once
+            # per BARGE_IN event (never per speech frame, never for SPEECH_END).
+            if event.kind is BargeInEventKind.BARGE_IN:
+                BARGEIN_EVENTS.inc()
             if self._on_barge_in is not None:
                 self._on_barge_in(event)
 
