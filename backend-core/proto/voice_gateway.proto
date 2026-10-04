@@ -1,0 +1,32 @@
+// CloudPSO Voice Agent — gateway <-> AI engine gRPC contract (PLACEHOLDER).
+//
+// Phase 1 scaffold only: this file is intentionally minimal and is NOT compiled
+// or imported by the application. It exists to reserve the contract's shape.
+// Phase 2 (gateway streaming) and Phase 3 (STT/NLU/TTS services) finalise it.
+syntax = "proto3";
+
+package cloudpso.voice.v1;
+
+// Streaming audio ingress: client audio frames -> engine, engine results -> client.
+service VoiceGateway {
+  // Bidirectional stream carrying raw audio up and transcripts/audio down.
+  rpc StreamAudio(stream AudioFrame) returns (stream VoiceEvent);
+}
+
+message AudioFrame {
+  bytes payload = 1;          // raw PCM/Opus bytes
+  uint32 sample_rate_hz = 2;  // e.g. 16000
+  int64  sequence = 3;        // monotonically increasing frame counter
+}
+
+message VoiceEvent {
+  oneof event {
+    TranscriptPartial transcript_partial = 1;
+    TranscriptFinal   transcript_final   = 2;
+    SynthesisChunk    synthesis_chunk    = 3;
+  }
+}
+
+message TranscriptPartial { string text = 1; }
+message TranscriptFinal   { string text = 1; float confidence = 2; }
+message SynthesisChunk    { bytes audio = 1; }

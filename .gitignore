@@ -1,0 +1,80 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+env/
+.eggs/
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+
+# ---- Node / frontend ----
+node_modules/
+dist/
+build/
+.vite/
+*.tsbuildinfo
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ---- Environment files ----
+# Keep the template, ignore real secrets.
+.env
+.env.*
+!.env.example
+
+# ---- Model / artifact dirs ----
+# Kept broad but non-conflicting with a future Triton model repo:
+# Triton repos conventionally store <model>/<version>/model.onnx, and the
+# version dirs are numeric, so we ignore the files themselves rather than
+# any directory literally named for a model.
+*.onnx
+*.pt
+*.pth
+*.bin
+*.safetensors
+*.ckpt
+*.h5
+*.pb
+*.tflite
+*.mlmodel
+*.engine
+*.plan
+models/
+model_cache/
+model-cache/
+artifacts/
+checkpoints/
+wandb/
+mlruns/
+# Triton model repositories contain large binaries and must not be committed.
+**/triton/models/
+
+# ---- IDE / OS cruft ----
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---- Logs / tmp ----
+*.log
+tmp/
+.cache/

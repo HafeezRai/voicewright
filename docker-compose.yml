@@ -1,0 +1,94 @@
+# CloudPSO Voice Agent — Phase 1 local stack.
+# Skeleton only: services build and expose health endpoints; no pipeline logic.
+# All values are .env-driven with sane defaults (no secrets committed).
+
+name: cloudpso
+
+services:
+  backend-core:
+    build:
+      context: ./backend-core
+      dockerfile: Dockerfile
+    image: cloudpso/backend-core:dev
+    # Values come from `.env` (auto-loaded by compose for interpolation) with
+    # defaults below. No env_file directive: it would hard-fail when `.env` is
+    # absent, and every variable it would carry is enumerated explicitly here.
+    environment:
+      CLOUDEPSO_ENV: ${CLOUDEPSO_ENV:-development}
+      CLOUDEPSO_LOG_LEVEL: ${CLOUDEPSO_LOG_LEVEL:-INFO}
+      CLOUDEPSO_CONFIG_PREFIX: ${CLOUDEPSO_CONFIG_PREFIX:-cloudpso}
+      BACKEND_CORE_HOST: ${BACKEND_CORE_HOST:-0.0.0.0}
+      # Container-internal bind ports are fixed; the host-published ports below
+      # are what BACKEND_CORE_PORT / BACKEND_CORE_GRPC_PORT configure.
+      BACKEND_CORE_PORT: "8000"
+      BACKEND_CORE_GRPC_PORT: "50051"
+      # How backend-core reaches ai-engine inside the compose network.
+      AI_ENGINE_URL: ${AI_ENGINE_URL:-http://ai-engine:8001}
+    ports:
+      - "${BACKEND_CORE_PORT:-8000}:8000"
+      - "${BACKEND_CORE_GRPC_PORT:-50051}:50051"
+    depends_on:
+      ai-engine:
+        condition: service_healthy
+    networks:
+      - cloudpso-net
+    restart: unless-stopped
+
+  ai-engine:
+    build:
+      context: ./ai-engine
+      dockerfile: Dockerfile
+    image: cloudpso/ai-engine:dev
+    environment:
+      CLOUDEPSO_ENV: ${CLOUDEPSO_ENV:-development}
+      CLOUDEPSO_LOG_LEVEL: ${CLOUDEPSO_LOG_LEVEL:-INFO}
+      CLOUDEPSO_CONFIG_PREFIX: ${CLOUDEPSO_CONFIG_PREFIX:-cloudpso}
+      AI_ENGINE_HOST: ${AI_ENGINE_HOST:-0.0.0.0}
+      # Fixed in-container bind port; AI_ENGINE_PORT in .env sets the host port.
+      AI_ENGINE_PORT: "8001"
+      AI_ENGINE_MODEL_CACHE: ${AI_ENGINE_MODEL_CACHE:-/models}
+    ports:
+      - "${AI_ENGINE_PORT:-8001}:8001"
+    volumes:
+      # Named volume keeps downloaded weights out of the git tree.
+      - ai-engine-models:${AI_ENGINE_MODEL_CACHE:-/models}
+    networks:
+      - cloudpso-net
+    restart: unless-stopped
+
+  frontend-dashboard:
+    build:
+      context: ./frontend-dashboard
+      dockerfile: Dockerfile
+    image: cloudpso/frontend-dashboard:dev
+    environment:
+      VITE_BACKEND_CORE_URL: ${VITE_BACKEND_CORE_URL:-http://localhost:8000}
+    ports:
+      - "${FRONTEND_DASHBOARD_PORT:-5173}:5173"
+    depends_on:
+      - backend-core
+    networks:
+      - cloudpso-net
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v2.51.2
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    networks:
+      - cloudpso-net
+    restart: unless-stopped
+
+networks:
+  cloudpso-net:
+    driver: bridge
+
+volumes:
+  ai-engine-models:
+  prometheus-data:

@@ -1,0 +1,33 @@
+# CloudPSO Voice Agent — minimal Prometheus scrape config (Phase 1).
+# Mounted read-only into the `prometheus` compose service.
+global:
+  scrape_interval: 15s       # default; override via --config.file if needed
+  evaluation_interval: 15s
+  external_labels:
+    cluster: cloudpso-local
+    env: development
+
+scrape_configs:
+  # Prometheus scraping itself.
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # backend-core — WebRTC gateway / WebSocket / barge-in metrics (Phase 2).
+  # The target is the compose service DNS name and container-internal port.
+  - job_name: backend-core
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["backend-core:8000"]
+        labels:
+          service: backend-core
+
+  # ai-engine — STT/NLU/TTS latency and throughput metrics (Phase 3).
+  # /metrics does not exist yet; the scrape will fail until Phase 3 lands it,
+  # which is expected and harmless for a local Phase 1 stack.
+  - job_name: ai-engine
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["ai-engine:8001"]
+        labels:
+          service: ai-engine

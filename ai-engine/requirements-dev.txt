@@ -1,0 +1,12 @@
+# Lightweight dev/test dependencies for ai-engine.
+# Deliberately EXCLUDES torch/transformers/onnxruntime/aiortc/av/silero-vad:
+# the Phase 1 app imports none of them, so the health + config tests run without
+# downloading the ML stack.
+fastapi>=0.110,<1.0
+uvicorn[standard]>=0.29,<1.0
+pydantic>=2.6,<3.0
+pydantic-settings>=2.2,<3.0
+python-dotenv>=1.0,<2.0
+
+pytest>=8.0,<9.0
+httpx>=0.27,<1.0
