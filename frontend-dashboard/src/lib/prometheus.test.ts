@@ -112,7 +112,7 @@ describe("prometheus text parser", () => {
 
 // ---------------------------------------------------------------------------
 // Real fixtures: captured from the running services (`GET /metrics`) while a
-// live signalling session and real NLU/TTS calls were in flight.
+// live signalling session and real LLM/TTS calls were in flight.
 // ---------------------------------------------------------------------------
 
 describe("parsing real backend-core /metrics output", () => {
@@ -140,13 +140,13 @@ describe("parsing real backend-core /metrics output", () => {
 describe("parsing real ai-engine /metrics output", () => {
   const parsed = parse(aiEngineFixture);
 
-  it("counts the real NLU/TTS requests made against the service", () => {
-    expect(sum(parsed, "cloudpso_ai_nlu_requests_total", { status: "ok" })).toBe(2);
+  it("counts the real LLM/TTS requests made against the service", () => {
+    expect(sum(parsed, "cloudpso_ai_llm_requests_total", { provider: "ollama", status: "ok" })).toBe(2);
     expect(sum(parsed, "cloudpso_ai_tts_requests_total", { status: "ok" })).toBe(1);
   });
 
   it("produces finite latency percentiles from the real histograms", () => {
-    const h = histogram(parsed, "cloudpso_ai_nlu_latency_seconds", { backend: "hf" });
+    const h = histogram(parsed, "cloudpso_ai_llm_latency_seconds", { provider: "ollama" });
     expect(h.count).toBe(2);
     const p50 = histogramQuantile(h, 0.5);
     const p95 = histogramQuantile(h, 0.95);

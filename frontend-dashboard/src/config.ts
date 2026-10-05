@@ -10,7 +10,7 @@
  * `VITE_BACKEND_CORE_URL` is honoured for continuity with the Phase 1 scaffold
  * (docker-compose.yml / Dockerfile already set it); `VITE_BACKEND_URL` is the
  * preferred Phase 4 name and wins when both are present. `VITE_AI_ENGINE_URL`
- * points at the STT/NLU/TTS service.
+ * points at the STT/LLM/TTS service.
  */
 
 // NOTE: 127.0.0.1 rather than `localhost` on purpose. On a machine running
@@ -60,7 +60,7 @@ export interface AppConfig {
   backendUrl: string;
   /** backend-core WebSocket signalling endpoint. */
   signalingUrl: string;
-  /** ai-engine HTTP base (stt, nlu, tts, health, /metrics). */
+  /** ai-engine HTTP base (stt, llm, tts, health, /metrics). */
   aiEngineUrl: string;
   /** How often the dashboard polls both /metrics endpoints, in ms. */
   metricsPollMs: number;

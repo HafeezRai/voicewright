@@ -25,7 +25,7 @@ export interface HistoryPoint {
   bargeInEvents: number;
   wsConnections: number;
   sttP95: number;
-  nluP95: number;
+  llmP95: number;
   ttsP95: number;
 }
 
@@ -74,7 +74,7 @@ export function useMetrics(
           bargeInEvents: next.bargeInEvents,
           wsConnections: next.wsConnections,
           sttP95: finite(next.sttP95),
-          nluP95: finite(next.nluP95),
+          llmP95: finite(next.llmP95),
           ttsP95: finite(next.ttsP95),
         };
         const merged = [...prev, point];

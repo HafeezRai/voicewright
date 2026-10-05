@@ -31,7 +31,7 @@ export function DashboardPanel({ metrics }: { metrics: UseMetrics }) {
   const ws = history.map((h) => h.wsConnections);
   const bargeIns = history.map((h) => h.bargeInEvents);
   const stt = history.map((h) => h.sttP95);
-  const nlu = history.map((h) => h.nluP95);
+  const llm = history.map((h) => h.llmP95);
   const tts = history.map((h) => h.ttsP95);
 
   return (
@@ -99,13 +99,13 @@ export function DashboardPanel({ metrics }: { metrics: UseMetrics }) {
         <h3 className="text-sm font-semibold text-slate-200">Pipeline latency (p50 / p95, ms)</h3>
         <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
           <MetricTile label="STT p50" value={ms(snapshot.sttP50)} unit="ms" sub={`p95 ${ms(snapshot.sttP95)}`} testId="tile-stt" />
-          <MetricTile label="NLU p50" value={ms(snapshot.nluP50)} unit="ms" sub={`p95 ${ms(snapshot.nluP95)}`} testId="tile-nlu" />
+          <MetricTile label="LLM p50" value={ms(snapshot.llmP50)} unit="ms" sub={`p95 ${ms(snapshot.llmP95)}`} testId="tile-llm" />
           <MetricTile label="TTS p50" value={ms(snapshot.ttsP50)} unit="ms" sub={`p95 ${ms(snapshot.ttsP95)}`} testId="tile-tts" />
           <MetricTile label="Pipeline p50" value={ms(snapshot.pipelineP50)} unit="ms" sub={`p95 ${ms(snapshot.pipelineP95)}`} testId="tile-pipeline" />
         </div>
         <div className="mt-3 grid grid-cols-2 gap-3 text-xs text-cloudpso-muted lg:grid-cols-4">
           <span>STT reqs: {formatMetric(snapshot.sttRequests)}</span>
-          <span>NLU reqs: {formatMetric(snapshot.nluRequests)}</span>
+          <span>LLM reqs: {formatMetric(snapshot.llmRequests)}</span>
           <span>TTS reqs: {formatMetric(snapshot.ttsRequests)}</span>
           <span>Pipeline turns: {formatMetric(snapshot.pipelineRequests)}</span>
         </div>
@@ -142,7 +142,7 @@ export function DashboardPanel({ metrics }: { metrics: UseMetrics }) {
               testId="chart-latency"
               series={[
                 { key: "stt", label: "STT", color: COLORS.accent, points: stt },
-                { key: "nlu", label: "NLU", color: COLORS.violet, points: nlu },
+                { key: "llm", label: "LLM", color: COLORS.violet, points: llm },
                 { key: "tts", label: "TTS", color: COLORS.ok, points: tts },
               ]}
             />

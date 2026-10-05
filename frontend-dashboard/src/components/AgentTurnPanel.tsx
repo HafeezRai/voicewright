@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { AiEngineError, type IntentResult, classify, synthesize, transcribe } from "../lib/aiEngine";
+import { AiEngineError, type AgentReply, ask, synthesize, transcribe } from "../lib/aiEngine";
 import { blobToMonoWav, pickRecorderMimeType } from "../lib/audio";
 import { StatusPill } from "./StatusPill";
 
@@ -9,16 +9,17 @@ interface Turn {
   /** Where the utterance text came from. */
   source: "typed" | "stt";
   text: string;
-  intent?: IntentResult;
+  /** The agent's generated reply, once it has arrived. */
+  reply?: string;
   error?: string;
   pending?: boolean;
 }
 
 /**
- * The transcript + intent pane. It drives ai-engine's real `/stt`, `/nlu` and
+ * The transcript + reply pane. It drives ai-engine's real `/stt`, `/llm` and
  * `/tts` endpoints from the browser: record a clip (MediaRecorder -> WAV via
- * `blobToMonoWav`), transcribe it, classify the intent, and synthesise the
- * agent's reply to the speakers.
+ * `blobToMonoWav`), transcribe it, ask the agent for a reply, and synthesise
+ * that reply to the speakers.
  *
  * `onAgentSpeaking` is called while TTS audio plays so the voice panel can tell
  * backend-core the agent is "speaking" — which is what makes barge-in
@@ -56,11 +57,11 @@ export function AgentTurnPanel({ onAgentSpeaking }: { onAgentSpeaking?: (speakin
     setTurns((prev) => prev.map((turn) => (turn.id === id ? { ...turn, ...patch } : turn)));
   }, []);
 
-  const runClassification = useCallback(
+  const runAsk = useCallback(
     async (value: string, turnId: number) => {
       try {
-        const intent = await classify(value);
-        updateTurn(turnId, { intent, pending: false });
+        const reply: AgentReply = await ask(value);
+        updateTurn(turnId, { reply: reply.reply_text, pending: false });
       } catch (error) {
         updateTurn(turnId, { pending: false, error: describe(error) });
       }
@@ -68,13 +69,13 @@ export function AgentTurnPanel({ onAgentSpeaking }: { onAgentSpeaking?: (speakin
     [updateTurn],
   );
 
-  const onClassify = useCallback(async () => {
+  const onAsk = useCallback(async () => {
     const value = text.trim();
     if (!value) return;
     setNotice(null);
     const id = addTurn({ source: "typed", text: value, pending: true });
-    await runClassification(value, id);
-  }, [addTurn, runClassification, text]);
+    await runAsk(value, id);
+  }, [addTurn, runAsk, text]);
 
   const onSpeak = useCallback(async () => {
     const value = text.trim();
@@ -128,7 +129,7 @@ export function AgentTurnPanel({ onAgentSpeaking }: { onAgentSpeaking?: (speakin
             const result = await transcribe(wav);
             const heard = result.text.trim() || "(no speech detected)";
             updateTurn(id, { text: heard, pending: true });
-            await runClassification(heard, id);
+            await runAsk(heard, id);
           } catch (error) {
             updateTurn(id, { pending: false, error: describe(error), text: "(transcription failed)" });
           } finally {
@@ -142,13 +143,13 @@ export function AgentTurnPanel({ onAgentSpeaking }: { onAgentSpeaking?: (speakin
     } catch (error) {
       setNotice(describe(error));
     }
-  }, [addTurn, runClassification, updateTurn]);
+  }, [addTurn, runAsk, updateTurn]);
 
   return (
     <section className="rounded-2xl border border-cloudpso-line bg-cloudpso-panel p-5">
       <header className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-slate-100">Agent turn — STT / NLU / TTS</h2>
-        <StatusPill label="ai-engine /stt /nlu /tts" tone="info" />
+        <h2 className="text-lg font-semibold text-slate-100">Agent turn — STT / LLM / TTS</h2>
+        <StatusPill label="ai-engine /stt /llm /tts" tone="info" />
       </header>
 
       <div className="mt-4 flex flex-col gap-3 sm:flex-row">
@@ -162,12 +163,12 @@ export function AgentTurnPanel({ onAgentSpeaking }: { onAgentSpeaking?: (speakin
         <div className="flex gap-2">
           <button
             type="button"
-            data-testid="classify"
-            onClick={() => void onClassify()}
+            data-testid="ask"
+            onClick={() => void onAsk()}
             disabled={busy}
             className="rounded-lg bg-cloudpso-accent px-4 py-2 text-sm font-medium text-white transition hover:brightness-110 disabled:opacity-40"
           >
-            Classify intent
+            Ask the agent
           </button>
           <button
             type="button"
@@ -202,7 +203,7 @@ export function AgentTurnPanel({ onAgentSpeaking }: { onAgentSpeaking?: (speakin
       <ul className="mt-4 space-y-2" data-testid="conversation">
         {turns.length === 0 ? (
           <li className="text-xs text-cloudpso-muted">
-            Classify a typed utterance, or record a clip to exercise real STT.
+            Ask the agent about a typed utterance, or record a clip to exercise real STT.
           </li>
         ) : (
           turns.map((turn) => (
@@ -212,20 +213,10 @@ export function AgentTurnPanel({ onAgentSpeaking }: { onAgentSpeaking?: (speakin
                 {turn.pending ? <span className="text-cloudpso-warn">processing…</span> : null}
               </div>
               <p className="mt-1 text-sm text-slate-100">{turn.text}</p>
-              {turn.intent ? (
-                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                  <span className="rounded-md bg-cloudpso-accent/15 px-2 py-0.5 font-medium text-cloudpso-accent">
-                    {turn.intent.intent}
-                  </span>
-                  <span className="text-cloudpso-muted">
-                    {(turn.intent.confidence * 100).toFixed(1)}% · {turn.intent.backend}
-                  </span>
-                  {Object.entries(turn.intent.slots).length > 0 ? (
-                    <span className="text-cloudpso-muted">
-                      slots: {Object.entries(turn.intent.slots).map(([k, v]) => `${k}=${v}`).join(", ")}
-                    </span>
-                  ) : null}
-                </div>
+              {turn.reply ? (
+                <p className="mt-2 rounded-md bg-cloudpso-accent/15 px-2 py-1 text-sm text-cloudpso-accent" data-testid="turn-reply">
+                  {turn.reply}
+                </p>
               ) : null}
               {turn.error ? <p className="mt-2 text-xs text-cloudpso-err">{turn.error}</p> : null}
             </li>

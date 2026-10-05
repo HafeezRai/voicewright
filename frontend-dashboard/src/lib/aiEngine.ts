@@ -1,24 +1,34 @@
 /**
- * Thin client for ai-engine's REST surface (Phase 3):
+ * Thin client for ai-engine's REST surface:
  *   GET  /health
  *   POST /stt       (WAV body -> transcript)
- *   POST /nlu       ({"text"} -> intent)
+ *   POST /llm       ({"text"} -> generated reply)
  *   POST /tts       ({"text"} -> WAV)
  *
- * These drive the real STT/NLU/TTS backends from the browser, which is how the
- * demo shows a transcript + intent without the WebRTC media path carrying them
- * yet (Phase 2's gateway is receive-only, so nothing is relayed over the peer
- * connection).
+ * These drive the real STT/LLM/TTS backends from the browser, which is how the
+ * demo shows a transcript + generated reply without the WebRTC media path
+ * carrying them yet (Phase 2's gateway is receive-only, so nothing is relayed
+ * over the peer connection).
+ *
+ * The middle stage is a generative LLM, not a classifier: `ask` returns free
+ * prose, not an intent.
  */
 
 import { config } from "../config";
 
-export interface IntentResult {
-  intent: string;
-  confidence: number;
-  backend: string;
-  slots: Record<string, string>;
-  scores: Record<string, number>;
+/** One token-usage record, when the provider reports it. */
+export interface AgentUsage {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+}
+
+/** The agent's reply to one utterance — what `POST /llm` returns. */
+export interface AgentReply {
+  reply_text: string;
+  model: string;
+  provider: string;
+  usage: AgentUsage | null;
 }
 
 export interface TranscriptResult {
@@ -69,9 +79,9 @@ export async function aiHealth(signal?: AbortSignal): Promise<boolean> {
   }
 }
 
-export async function classify(text: string): Promise<IntentResult> {
-  const response = await post("/nlu", JSON.stringify({ text }), { "Content-Type": "application/json" });
-  return (await response.json()) as IntentResult;
+export async function ask(text: string): Promise<AgentReply> {
+  const response = await post("/llm", JSON.stringify({ text }), { "Content-Type": "application/json" });
+  return (await response.json()) as AgentReply;
 }
 
 export async function synthesize(text: string, speed?: number): Promise<Blob> {

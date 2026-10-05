@@ -40,7 +40,7 @@ export interface DashboardSnapshot {
 
   // --- ai-engine: request counts ------------------------------------------
   sttRequests: number;
-  nluRequests: number;
+  llmRequests: number;
   ttsRequests: number;
   pipelineRequests: number;
   ttsCancelled: number;
@@ -48,8 +48,8 @@ export interface DashboardSnapshot {
   // --- ai-engine: latency percentiles (milliseconds) ----------------------
   sttP50: number;
   sttP95: number;
-  nluP50: number;
-  nluP95: number;
+  llmP50: number;
+  llmP95: number;
   ttsP50: number;
   ttsP95: number;
   pipelineP50: number;
@@ -68,8 +68,8 @@ const METRIC = {
 
   sttRequests: "cloudpso_ai_stt_requests_total",
   sttLatency: "cloudpso_ai_stt_latency_seconds",
-  nluRequests: "cloudpso_ai_nlu_requests_total",
-  nluLatency: "cloudpso_ai_nlu_latency_seconds",
+  llmRequests: "cloudpso_ai_llm_requests_total",
+  llmLatency: "cloudpso_ai_llm_latency_seconds",
   ttsRequests: "cloudpso_ai_tts_requests_total",
   ttsLatency: "cloudpso_ai_tts_latency_seconds",
   ttsCancelled: "cloudpso_ai_tts_cancelled_total",
@@ -125,7 +125,7 @@ export function summarise(backend: ServiceMetrics, aiEngine: ServiceMetrics): Da
   const a = aiEngine.parsed;
 
   const stt = percentile(a, METRIC.sttLatency);
-  const nlu = percentile(a, METRIC.nluLatency);
+  const llm = percentile(a, METRIC.llmLatency);
   const tts = percentile(a, METRIC.ttsLatency);
   const pipeline = percentile(a, METRIC.pipelineLatency);
 
@@ -141,15 +141,15 @@ export function summarise(backend: ServiceMetrics, aiEngine: ServiceMetrics): Da
     vadSpeechFrames: b ? sum(b, METRIC.vadFrames, { speech: "true" }) : 0,
 
     sttRequests: a ? sum(a, METRIC.sttRequests) : 0,
-    nluRequests: a ? sum(a, METRIC.nluRequests) : 0,
+    llmRequests: a ? sum(a, METRIC.llmRequests) : 0,
     ttsRequests: a ? sum(a, METRIC.ttsRequests) : 0,
     pipelineRequests: a ? sum(a, METRIC.pipelineRequests) : 0,
     ttsCancelled: a ? sum(a, METRIC.ttsCancelled) : 0,
 
     sttP50: stt.p50,
     sttP95: stt.p95,
-    nluP50: nlu.p50,
-    nluP95: nlu.p95,
+    llmP50: llm.p50,
+    llmP95: llm.p95,
     ttsP50: tts.p50,
     ttsP95: tts.p95,
     pipelineP50: pipeline.p50,

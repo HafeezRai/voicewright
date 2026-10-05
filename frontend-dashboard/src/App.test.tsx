@@ -126,7 +126,7 @@ describe("App — observability dashboard", () => {
     await waitFor(() => expect(screen.getAllByTestId("svc-online")).toHaveLength(2));
     expect(screen.getByTestId("tile-active-sessions")).toHaveTextContent("1");
     expect(screen.getByTestId("tile-ws")).toHaveTextContent("1");
-    expect(screen.getByTestId("tile-nlu")).toHaveTextContent("p95");
+    expect(screen.getByTestId("tile-llm")).toHaveTextContent("p95");
     // No error series in the fixtures.
     expect(screen.getByTestId("tile-errors")).toHaveTextContent("0");
   });

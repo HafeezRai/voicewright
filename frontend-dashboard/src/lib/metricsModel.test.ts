@@ -12,6 +12,15 @@ describe("summarise against the real captured fixtures", () => {
     expect(snapshot.aiEngine.online).toBe(true);
   });
 
+  it("carries the renamed LLM series and none of the retired NLU ones", () => {
+    // The worst failure mode here is silent: a fixture left on the old names
+    // makes the dashboard show 0 requests and NaN latencies with no error, and
+    // every other assertion still passes. Pin the names directly.
+    expect(aiEngineFixture).toContain("cloudpso_ai_llm_requests_total");
+    expect(aiEngineFixture).toContain("cloudpso_ai_llm_latency_seconds");
+    expect(aiEngineFixture).not.toContain("cloudpso_ai_nlu");
+  });
+
   it("pulls the WebRTC/barge-in figures from backend-core", () => {
     expect(snapshot.activeSessions).toBe(1);
     expect(snapshot.totalSessions).toBe(1);
@@ -20,22 +29,23 @@ describe("summarise against the real captured fixtures", () => {
   });
 
   it("pulls the request counts from ai-engine", () => {
-    expect(snapshot.nluRequests).toBe(2);
+    expect(snapshot.llmRequests).toBe(2);
     expect(snapshot.ttsRequests).toBe(1);
     // No TTS was cancelled, and STT was never called, in the capture.
     expect(snapshot.ttsCancelled).toBe(0);
     expect(snapshot.sttRequests).toBe(0);
   });
 
-  it("yields a usable NLU percentile and a graceful NaN where there is no data", () => {
-    expect(snapshot.nluP50).toBeGreaterThan(0);
-    expect(snapshot.nluP95).toBeGreaterThanOrEqual(snapshot.nluP50);
+  it("yields a usable LLM percentile and a graceful NaN where there is no data", () => {
+    expect(snapshot.llmP50).toBeGreaterThan(0);
+    expect(snapshot.llmP95).toBeGreaterThanOrEqual(snapshot.llmP50);
     // STT histogram has no observations -> percentile is NaN, not a crash.
     expect(snapshot.sttP95).toBeNaN();
   });
 
   it("exposes labelled values for arbitrary series lookups", () => {
-    const okCount = labelledValue(parseService(aiEngineFixture), "cloudpso_ai_nlu_requests_total", {
+    const okCount = labelledValue(parseService(aiEngineFixture), "cloudpso_ai_llm_requests_total", {
+      provider: "ollama",
       status: "ok",
     });
     expect(okCount).toBe(2);
@@ -53,7 +63,7 @@ describe("offline services degrade gracefully", () => {
       "activeSessions",
       "bargeInEvents",
       "sttRequests",
-      "nluRequests",
+      "llmRequests",
       "ttsRequests",
       "errorCount",
     ] as const) {
