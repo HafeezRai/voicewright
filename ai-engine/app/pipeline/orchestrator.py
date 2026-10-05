@@ -36,21 +36,31 @@ Where barge-in cancels
 ----------------------
 Two cancel points, both driven by the sink's :class:`CancelToken`:
 
-* before synthesis starts, which is the point a turn abandoned *while the model
-  was still generating* is detected. ``sink.start()`` is deliberately called
-  *before* the LLM call, so the agent is interruptible while it is thinking --
-  otherwise a caller who talks over the silence is ignored;
-* between audio chunks below, which ends playback at the current chunk. The
-  token is also passed into :meth:`TTSEngine.stream`, so a backend that can
-  interrupt synthesis (sherpa-onnx does, via its generation callback) aborts the
-  forward pass rather than finishing an utterance nobody will hear.
+* **between generated deltas**, which is the point a turn abandoned *while the
+  model was still thinking* is detected -- and it aborts generation itself rather
+  than only the playback. ``sink.start()`` is deliberately called *before* the
+  LLM call, so a caller who talks over the silence is heard rather than ignored;
+* **between audio chunks**, which ends playback at the current chunk. The token
+  is also passed into :meth:`TTSEngine.stream`, so a backend that can interrupt
+  synthesis (sherpa-onnx does, via its generation callback) aborts the forward
+  pass rather than finishing an utterance nobody will hear.
+
+The trap in the first point: :meth:`TTSPlaybackSink.start` re-arms the cancel
+token (``token.reset()``), so a ``stop()`` that races in *before* ``start()`` is
+silently undone. Every barge-in test therefore fires ``stop()`` after the sink
+has started.
 
 STT is not cancellable: it is a short, bounded call, and killing it mid-flight
 would leave the session in a worse state than letting it finish.
 
-This is the "generate fully, then synthesise" shape: the whole reply is produced
-before the first audio chunk is emitted. Sentence-by-sentence streaming, which
-gets the first audio out in about a second, is a separate change.
+Streaming shape
+---------------
+Deltas from :meth:`LLMEngine.stream` are fed to a :class:`SentenceSegmenter`, and
+each *completed sentence* is synthesised and emitted while the rest of the reply
+is still being generated. That is what gets the first audio out in about a second
+instead of only after the whole reply has been produced. ``REPLY_DELTA`` carries
+each delta as it arrives, so ``DONE.text`` is always the concatenation of every
+``REPLY_DELTA`` yielded.
 """
 
 from __future__ import annotations
@@ -88,6 +98,7 @@ from app.metrics import (
     TTS_LATENCY,
     TTS_REQUESTS,
 )
+from app.pipeline.segmentation import SentenceSegmenter, iter_sentences
 from app.stt.base import STTEngine, TranscriptionResult
 from app.tts.base import CancelToken, SynthesisResult, TTSEngine
 from app.tts.sink import TTSPlaybackSink
@@ -261,7 +272,10 @@ class VoicePipeline:
     ) -> Iterator[PipelineEvent]:
         """Yield the turn as it happens, cutting it off on barge-in.
 
-        See the module docstring for the two cancel points.
+        The reply is generated and spoken *concurrently*: each delta is fed to a
+        :class:`SentenceSegmenter`, and every sentence it completes is synthesised
+        and emitted while the rest of the reply is still being generated. See the
+        module docstring for the two cancel points.
         """
         started = time.perf_counter()
         t0 = time.perf_counter()
@@ -271,73 +285,117 @@ class VoicePipeline:
 
         sink = sink or TTSPlaybackSink()
         # Started *before* generation, so a caller who talks over the silence
-        # while the model is thinking is heard rather than ignored.
+        # while the model is thinking is heard rather than ignored. Note this
+        # re-arms the token: a stop() before this point would be silently undone.
         sink.start()
         token: CancelToken = sink.cancel_token
-
-        t1 = time.perf_counter()
-        llm_result = self._generate(transcript.text, system_prompt=system_prompt, history=history)
-        llm_s = time.perf_counter() - t1
         provider = self._provider()
-        logger.debug("stream turn: stt=%.3fs llm=%.3fs provider=%s",
-                     stt_s, llm_s, provider)
+        messages = self._build_messages(transcript.text, system_prompt, history)
+        logger.debug("stream turn: stt=%.3fs provider=%s", stt_s, provider)
 
-        # The whole reply is one delta in this shape of the pipeline.
-        yield PipelineEvent(EventKind.REPLY_DELTA, text=llm_result.text)
-
-        # ---- BARGE-IN CANCEL POINT: the turn was abandoned while thinking ---
-        if token.cancelled or not sink.is_speaking:
-            LLM_CANCELLED.labels(provider=provider).inc()
-            LLM_REQUESTS.labels(provider=provider, status="cancelled").inc()
-            yield PipelineEvent(EventKind.CANCELLED, text=llm_result.text)
-            return
-        # ---------------------------------------------------------------------
-
-        t2 = time.perf_counter()
+        segmenter = SentenceSegmenter()
+        #: Every delta yielded as REPLY_DELTA, so DONE.text is exactly their join.
+        parts: list[str] = []
+        cancelled = False
+        fallback = False
+        first_token_s: float | None = None
         first_chunk_s: float | None = None
         produced = 0
-        cancelled = False
-        try:
-            for chunk in self.tts.stream(
-                llm_result.text, chunk_samples=self.chunk_samples, cancel=token
-            ):
-                # ---- BARGE-IN CANCEL POINT ------------------------------
-                if not sink.is_speaking or token.cancelled:
+        llm_t0 = time.perf_counter()
+
+        def speak(sentences: Iterable[str]) -> Iterator[PipelineEvent]:
+            """Synthesise each sentence, stopping the moment barge-in lands.
+
+            This is cancel point B: the check between audio chunks. When it
+            trips, ``cancelled`` is set and the caller's outer loop unwinds.
+            """
+            nonlocal cancelled, first_chunk_s, produced
+            for sentence in sentences:
+                t_tts = time.perf_counter()
+                for chunk in self._speak(sentence, sink, token):
+                    if first_chunk_s is None:
+                        first_chunk_s = time.perf_counter() - started
+                    produced += len(chunk)
+                    yield PipelineEvent(
+                        EventKind.AUDIO_CHUNK,
+                        audio=chunk,
+                        sample_rate=self.tts.sample_rate,
+                    )
+                TTS_LATENCY.observe(time.perf_counter() - t_tts)
+                # ---- BARGE-IN CANCEL POINT B: between audio chunks ---------
+                if token.cancelled or not sink.is_speaking:
                     cancelled = True
-                    break
-                # ---------------------------------------------------------
-                if first_chunk_s is None:
-                    first_chunk_s = time.perf_counter() - t2
-                produced += len(chunk)
-                yield PipelineEvent(
-                    EventKind.AUDIO_CHUNK, audio=chunk, sample_rate=self.tts.sample_rate
+                    return
+                # ------------------------------------------------------------
+
+        try:
+            try:
+                for delta in self.llm.stream(messages, cancel=token):
+                    # ---- BARGE-IN CANCEL POINT A: between deltas ------------
+                    # The turn was abandoned while the model was still thinking;
+                    # this aborts generation, not just playback.
+                    if token.cancelled or not sink.is_speaking:
+                        cancelled = True
+                        break
+                    # ---------------------------------------------------------
+                    if first_token_s is None:
+                        first_token_s = time.perf_counter() - llm_t0
+                        LLM_FIRST_TOKEN.labels(provider=provider).observe(first_token_s)
+                    parts.append(delta)
+                    yield PipelineEvent(EventKind.REPLY_DELTA, text=delta)
+                    yield from speak(segmenter.feed(delta))
+                    if cancelled:
+                        break
+                else:
+                    # The deltas ran out with a fragment still buffered (a reply
+                    # that stopped mid-sentence still gets spoken).
+                    yield from speak(segmenter.flush())
+            except _LLM_FAILURES as exc:
+                if not self.fallback_reply:
+                    LLM_REQUESTS.labels(provider=provider, status="error").inc()
+                    raise
+                logger.warning(
+                    "LLM unavailable (%s); speaking the configured fallback reply", exc
                 )
-            # The generator can also end early *because* of the cancel (the
-            # backend stops producing), in which case the loop above exits
-            # normally and the check inside it never runs again. Catch that
-            # here, or a cancelled turn would be reported as a completed one.
+                fallback = True
+                parts = [self.fallback_reply]
+                yield PipelineEvent(EventKind.REPLY_DELTA, text=self.fallback_reply)
+                if not token.cancelled and sink.is_speaking:
+                    yield from speak(iter_sentences(self.fallback_reply))
+                else:
+                    cancelled = True
+
+            # The delta stream can also end early *because* of the cancel -- and
+            # if no delta ever arrived, the in-loop check never ran at all. Catch
+            # both here, before the finally below marks the sink finished, or an
+            # abandoned turn would be reported as a completed one.
             if not cancelled and (token.cancelled or not sink.is_speaking):
                 cancelled = True
         finally:
-            tts_s = time.perf_counter() - t2
-            TTS_LATENCY.observe(tts_s)
+            LLM_LATENCY.labels(provider=provider).observe(time.perf_counter() - llm_t0)
             if produced and self.tts.sample_rate:
                 TTS_AUDIO_SECONDS.observe(produced / float(self.tts.sample_rate))
             if sink.is_speaking:
                 sink.finish()
 
+        if first_chunk_s is not None:
+            logger.debug("tts first chunk in %.3fs of the turn", first_chunk_s)
+
         if cancelled:
+            LLM_CANCELLED.labels(provider=provider).inc()
+            LLM_REQUESTS.labels(provider=provider, status="cancelled").inc()
             TTS_CANCELLED.inc()
             TTS_REQUESTS.labels(status="cancelled").inc()
-            yield PipelineEvent(EventKind.CANCELLED, text=llm_result.text)
+            yield PipelineEvent(EventKind.CANCELLED, text="".join(parts))
             return
 
+        LLM_REQUESTS.labels(
+            provider=provider, status="fallback" if fallback else "ok"
+        ).inc()
         TTS_REQUESTS.labels(status="ok").inc()
-        if first_chunk_s is not None:
-            logger.debug("tts first chunk in %.3fs", first_chunk_s)
         PIPELINE_REQUESTS.labels(status="ok", llm_provider=provider).inc()
         PIPELINE_LATENCY.observe(time.perf_counter() - started)
-        yield PipelineEvent(EventKind.DONE, text=llm_result.text)
+        yield PipelineEvent(EventKind.DONE, text="".join(parts))
 
     # -- internals ----------------------------------------------------------
     def _provider(self) -> str:
@@ -412,6 +470,25 @@ class VoicePipeline:
                     result.usage.completion_tokens
                 )
         return result
+
+    def _speak(
+        self,
+        sentence: str,
+        sink: TTSPlaybackSink,
+        token: CancelToken,
+    ) -> Iterator[np.ndarray]:
+        """Yield one sentence's audio chunks, stopping the moment barge-in lands.
+
+        The token is handed to :meth:`TTSEngine.stream` (a backend that can
+        interrupt synthesis aborts the forward pass), and re-checked here so a
+        backend that cannot still stops between chunks.
+        """
+        for chunk in self.tts.stream(
+            sentence, chunk_samples=self.chunk_samples, cancel=token
+        ):
+            if token.cancelled or not sink.is_speaking:
+                return
+            yield chunk
 
     def _synthesize(self, text: str, *, speed: float | None = None) -> SynthesisResult:
         t2 = time.perf_counter()

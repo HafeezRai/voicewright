@@ -103,10 +103,11 @@ def test_streaming_turn_emits_the_expected_events(pipeline_engine, tts_engine) -
     transcript_event = events[0]
     assert transcript_event.text.strip()
 
-    delta = next(e for e in events if e.kind is EventKind.REPLY_DELTA)
-    assert delta.text == FAKE_REPLY
+    deltas = [e.text for e in events if e.kind is EventKind.REPLY_DELTA]
+    assert len(deltas) > 1, "the reply should arrive as several deltas, not one"
     done = next(e for e in events if e.kind is EventKind.DONE)
-    assert done.text == FAKE_REPLY
+    assert done.text == "".join(deltas), "DONE.text must equal the concatenated deltas"
+    assert done.text.strip() == FAKE_REPLY
 
     audio_events = [e for e in events if e.kind is EventKind.AUDIO_CHUNK]
     joined = np.concatenate([e.audio for e in audio_events])
@@ -230,19 +231,20 @@ def test_streaming_turn_is_interruptible_while_the_model_is_thinking(
     """The agent must be interruptible *before* it produces any audio.
 
     ``sink.start()`` runs before the generation call precisely so a caller who
-    talks over the silence is heard. This is the case that catches a regression
-    in that ordering: if ``start()`` moved back after generation, it would
-    re-arm the cancel token that the barge-in already set, and the turn would
-    finish and report ``DONE`` instead of ``CANCELLED``.
+    talks over the silence is heard: the barge-in controller stops the sink
+    during generation, and the next delta check aborts it. This is the case that
+    catches a regression in that ordering: if ``start()`` moved back after
+    generation it would re-arm the cancel token the barge-in already set, and the
+    turn would finish and report ``DONE`` instead of ``CANCELLED``.
     """
     sink = TTSPlaybackSink()
 
     class InterruptedLLM(FakeLLM):
         """Stops the sink *during* generation, as the barge-in controller does."""
 
-        def generate(self, messages):
+        def stream(self, messages, *, cancel=None):
             sink.stop()
-            return super().generate(messages)
+            yield from super().stream(messages, cancel=cancel)
 
     pipeline = VoicePipeline(stt_engine, InterruptedLLM(), tts_engine, sample_rate=16000)
     audio, rate = load_wav(str(speech_wav))
@@ -251,11 +253,54 @@ def test_streaming_turn_is_interruptible_while_the_model_is_thinking(
     kinds = [e.kind for e in events]
 
     assert EventKind.TRANSCRIPT_FINAL in kinds
-    assert EventKind.REPLY_DELTA in kinds, "generation should still have run"
+    assert len(pipeline.llm.calls) == 1, "generation should still have run"
     assert EventKind.CANCELLED in kinds
     assert EventKind.DONE not in kinds, "an abandoned turn must not report DONE"
     assert EventKind.AUDIO_CHUNK not in kinds, (
         "the turn was abandoned while thinking, so nothing should have been spoken"
+    )
+
+
+def test_barge_in_during_generation_aborts_before_any_audio(
+    stt_engine, tts_engine, speech_wav
+) -> None:
+    """Stopping the sink *mid-generation* cancels the turn, not just playback.
+
+    The model streams slowly; the driver stops the sink the instant the first
+    delta lands. Nothing produced after that may be spoken, and the turn must
+    report ``CANCELLED`` rather than ``DONE``. Commit 2 could only cover a cancel
+    before or around generation -- sentence-chunked streaming is what makes
+    generation itself interruptible, so this is the case that guards it.
+    """
+    reply = "Sure, I can help with that. What day would suit you?"
+    audio, rate = load_wav(str(speech_wav))
+
+    # Reference: the same reply, streamed without a barge-in, does get spoken --
+    # so "no audio" below is a real contrast, not a reply that carried no audio.
+    full = list(
+        VoicePipeline(
+            stt_engine, FakeLLM(reply=reply), tts_engine, sample_rate=16000
+        ).stream_turn(audio, rate)
+    )
+    assert any(e.kind is EventKind.AUDIO_CHUNK for e in full)
+
+    sink = TTSPlaybackSink()
+    kinds: list[EventKind] = []
+    deltas: list[str] = []
+    for event in VoicePipeline(
+        stt_engine, FakeLLM(reply=reply, delta_delay_s=0.01), tts_engine, sample_rate=16000
+    ).stream_turn(audio, rate, sink=sink):
+        kinds.append(event.kind)
+        if event.kind is EventKind.REPLY_DELTA:
+            deltas.append(event.text or "")
+            sink.stop()  # the barge-in controller, right after the first delta
+
+    assert deltas, "the stream should have produced at least one delta"
+    assert "".join(deltas).strip(), "the first delta carried text"
+    assert EventKind.CANCELLED in kinds
+    assert EventKind.DONE not in kinds, "a cancelled turn must not also report DONE"
+    assert EventKind.AUDIO_CHUNK not in kinds, (
+        "generation was aborted before a sentence completed, so no audio should play"
     )
 
 
