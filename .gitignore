@@ -65,6 +65,9 @@ model_cache/
 model-cache/
 artifacts/
 checkpoints/
+# ai-engine runtime state: the SQLite agent/knowledge store (created on first
+# boot at <repo>/ai-engine/data/agents.db).
+ai-engine/data/
 wandb/
 mlruns/
 # Triton model repositories contain large binaries and must not be committed.

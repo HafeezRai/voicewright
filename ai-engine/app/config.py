@@ -59,6 +59,11 @@ _LEGACY_NLU_PREFIX = "AI_ENGINE_NLU_"
 #: where the container path ``/models`` does not exist.
 _LOCAL_MODELS_DIRNAME = "models"
 
+#: Directory (relative to the ai-engine package root) holding runtime state --
+#: today the agent/knowledge SQLite file. Separate from ``models`` so wiping
+#: downloaded weights does not delete the user's agents, and vice versa.
+_LOCAL_DATA_DIRNAME = "data"
+
 
 def _auto_device() -> Device:
     """Pick the fastest device available when none is configured explicitly.
@@ -126,6 +131,41 @@ class Settings(BaseSettings):
     stt_model: str = Field(default="base.en", alias="AI_ENGINE_STT_MODEL")
     stt_compute_type: str = Field(default="int8", alias="AI_ENGINE_STT_COMPUTE_TYPE")
     stt_beam_size: int = Field(default=1, ge=1, le=10, alias="AI_ENGINE_STT_BEAM_SIZE")
+
+    # --- agent config store / knowledge base (step 2) -----------------------
+    #: SQLite file holding orgs, agents, documents and chunk vectors. Blank
+    #: (the default) resolves to ``<repo>/ai-engine/data/agents.db``; tests
+    #: point this at a temp file. See :attr:`Settings.agent_db_path`.
+    agent_db: str = Field(default="", alias="AI_ENGINE_AGENT_DB")
+    #: Master switch for retrieval grounding. Off means every turn runs
+    #: ungrounded even when the agent has documents, with no other change.
+    knowledge_enabled: bool = Field(default=True, alias="AI_ENGINE_KNOWLEDGE_ENABLED")
+    #: Target chunk size in *characters*. 500 chars is ~125 tokens of English
+    #: (roughly 4 chars/token), which fits inside MiniLM's 128-token window --
+    #: a longer chunk would be silently truncated by the tokenizer at embed
+    #: time and so would half-exist in the index. See ``app.knowledge.chunking``.
+    knowledge_chunk_chars: int = Field(
+        default=500, ge=100, le=4000, alias="AI_ENGINE_KNOWLEDGE_CHUNK_CHARS"
+    )
+    #: Characters of the previous chunk repeated at the head of the next, so a
+    #: sentence split across a boundary is still retrievable from either side.
+    knowledge_chunk_overlap_chars: int = Field(
+        default=80, ge=0, le=2000, alias="AI_ENGINE_KNOWLEDGE_CHUNK_OVERLAP_CHARS"
+    )
+    #: Maximum chunks injected into the system message per turn.
+    knowledge_top_k: int = Field(default=3, ge=1, le=20, alias="AI_ENGINE_KNOWLEDGE_TOP_K")
+    #: Minimum cosine similarity a chunk must reach to be injected. The point is
+    #: the *empty* case: injecting the three best chunks on a query they do not
+    #: answer makes the reply worse, not better. MiniLM puts related sentences
+    #: around 0.4-0.6 and unrelated ones below 0.2; 0.35 sits in the gap.
+    knowledge_min_score: float = Field(
+        default=0.35, ge=-1.0, le=1.0, alias="AI_ENGINE_KNOWLEDGE_MIN_SCORE"
+    )
+    #: Hard cap on a single pasted/uploaded document, so one request cannot
+    #: fill the process's memory or the store.
+    knowledge_max_document_chars: int = Field(
+        default=200_000, ge=1, alias="AI_ENGINE_KNOWLEDGE_MAX_DOCUMENT_CHARS"
+    )
 
     # --- knowledge (embeddings) ---------------------------------------------
     #: The MiniLM encoder that outlived the intent model: it is the retrieval
@@ -308,6 +348,21 @@ class Settings(BaseSettings):
     def tts_model_dir(self) -> Path:
         """Directory holding the Piper/VITS voice referenced by ``tts_model``."""
         return self.models_root / "tts" / self.tts_model
+
+    @property
+    def data_dir(self) -> Path:
+        """Writable directory for service state (the agent store)."""
+        return Path(__file__).resolve().parents[1] / _LOCAL_DATA_DIRNAME
+
+    @property
+    def agent_db_path(self) -> Path:
+        """The SQLite file backing the agent store and knowledge base.
+
+        ``AI_ENGINE_AGENT_DB`` when set (a temp file under pytest), otherwise
+        ``<repo>/ai-engine/data/agents.db``. The parent directory is created on
+        demand by the store, not here -- a property must stay side-effect free.
+        """
+        return Path(self.agent_db) if self.agent_db else self.data_dir / "agents.db"
 
 
 def configure_hf_home(settings: Settings) -> None:

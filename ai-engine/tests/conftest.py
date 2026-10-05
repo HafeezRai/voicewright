@@ -30,6 +30,7 @@ rather than failing -- a bare checkout stays green.
 from __future__ import annotations
 
 import os
+import tempfile
 import time
 from pathlib import Path
 
@@ -39,6 +40,12 @@ import pytest
 os.environ.setdefault("AI_ENGINE_LLM_WARMUP", "false")
 os.environ.setdefault("AI_ENGINE_GRPC_ENABLED", "false")
 os.environ.setdefault("AI_ENGINE_LOG_LEVEL", "WARNING")
+#: The agent store is a SQLite file the served app opens at import. Point it at
+#: a throwaway file so the suite never touches a developer's real agents, and so
+#: the app-under-test and ad-hoc stores in tests share nothing.
+os.environ.setdefault(
+    "AI_ENGINE_AGENT_DB", str(Path(tempfile.mkdtemp(prefix="cloudpso-agents-")) / "agents.db")
+)
 
 from app.cancellation import CancelToken
 from app.config import configure_hf_home, get_settings

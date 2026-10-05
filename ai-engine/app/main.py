@@ -34,6 +34,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from pydantic import BaseModel, Field
 
+from app.agents import (
+    AgentCreate,
+    AgentOut,
+    AgentStore,
+    AgentUpdate,
+)
+from app.agents.store import DEFAULT_ORG_ID
 from app.audio_io import to_wav_bytes
 from app.config import get_settings
 from app.grpc.server import start_grpc_server
@@ -51,6 +58,10 @@ logger = logging.getLogger(__name__)
 
 #: The single process-wide pipeline. Constructing it loads no weights.
 pipeline: VoicePipeline = build_pipeline(settings)
+
+#: The agent/knowledge store. Opening it creates the file and seeds the default
+#: org, so the service has a working control plane with no setup step.
+agent_store = AgentStore(settings.agent_db_path)
 
 #: How many distinct sessions keep history in memory. A demo has a handful; the
 #: cap exists so an unauthenticated caller cannot grow the process without bound
@@ -311,6 +322,86 @@ async def run_pipeline(
             to_wav_bytes(result.speech.audio, result.speech.sample_rate)
         ).decode("ascii")
     return payload
+
+
+# ---------------------------------------------------------------------------
+# Agent configuration (CRUD)
+#
+# A tenant-aware store from day one: every row carries an ``org_id`` and every
+# query is scoped by one. There is no auth and no org UI yet -- the org comes
+# from ``?org_id=`` or an ``X-Org-Id`` header, defaulting to the seeded default
+# org. The important property is the *shape*: an agent that belongs to another
+# org is reported as 404, never 403, so a caller cannot probe for the existence
+# of another tenant's agents by watching the status code.
+#
+# These handlers are deliberately synchronous ``def``: the store is blocking
+# SQLite, so letting Starlette run them in its worker threadpool keeps the event
+# loop free. That is also why the store opens a connection per call rather than
+# sharing one -- see ``app.agents.store``.
+# ---------------------------------------------------------------------------
+
+
+def _resolve_org(request: Request) -> str:
+    """The org a request acts within.
+
+    Precedence: ``?org_id=`` query, then ``X-Org-Id`` header, then the seeded
+    default org. Blank values are treated as absent so ``?org_id=`` does not
+    resolve to the empty string (which is a valid, if pointless, org id).
+    """
+    return (
+        request.query_params.get("org_id")
+        or request.headers.get("x-org-id")
+        or DEFAULT_ORG_ID
+    )
+
+
+def _agent_or_404(org_id: str, agent_id: str) -> dict:
+    agent = agent_store.get_agent(org_id, agent_id)
+    if agent is None:
+        # Deliberately the same 404 whether the agent does not exist or belongs
+        # to another org: existence must not leak across tenants.
+        raise HTTPException(status_code=404, detail=f"agent not found: {agent_id}")
+    return agent
+
+
+@app.post("/agents", response_model=AgentOut, status_code=201)
+def create_agent(payload: AgentCreate, request: Request) -> AgentOut:
+    """Create an agent in the caller's org."""
+    org_id = _resolve_org(request)
+    if not agent_store.org_exists(org_id):
+        raise HTTPException(status_code=404, detail=f"unknown org: {org_id}")
+    return AgentOut(**agent_store.create_agent(org_id, payload.model_dump()))
+
+
+@app.get("/agents", response_model=list[AgentOut])
+def list_agents(request: Request) -> list[AgentOut]:
+    """List the caller's org's agents (empty for an unknown org)."""
+    return [AgentOut(**row) for row in agent_store.list_agents(_resolve_org(request))]
+
+
+@app.get("/agents/{agent_id}", response_model=AgentOut)
+def get_agent(agent_id: str, request: Request) -> AgentOut:
+    """Fetch one agent, scoped to the caller's org."""
+    return AgentOut(**_agent_or_404(_resolve_org(request), agent_id))
+
+
+@app.put("/agents/{agent_id}", response_model=AgentOut)
+def update_agent(agent_id: str, payload: AgentUpdate, request: Request) -> AgentOut:
+    """Partially update an agent. Unset fields are left unchanged."""
+    row = agent_store.update_agent(
+        _resolve_org(request), agent_id, payload.model_dump(exclude_unset=True)
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"agent not found: {agent_id}")
+    return AgentOut(**row)
+
+
+@app.delete("/agents/{agent_id}", status_code=204, response_class=Response)
+def delete_agent(agent_id: str, request: Request) -> Response:
+    """Delete an agent and, by cascade, its documents and chunks."""
+    if not agent_store.delete_agent(_resolve_org(request), agent_id):
+        raise HTTPException(status_code=404, detail=f"agent not found: {agent_id}")
+    return Response(status_code=204)
 
 
 # ---------------------------------------------------------------------------
