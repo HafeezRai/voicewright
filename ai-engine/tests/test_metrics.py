@@ -13,9 +13,12 @@ EXPECTED = {
     "cloudpso_ai_stt_requests_total",
     "cloudpso_ai_stt_latency_seconds",
     "cloudpso_ai_stt_audio_seconds",
-    # NLU
-    "cloudpso_ai_nlu_requests_total",
-    "cloudpso_ai_nlu_latency_seconds",
+    # LLM
+    "cloudpso_ai_llm_requests_total",
+    "cloudpso_ai_llm_latency_seconds",
+    "cloudpso_ai_llm_first_token_seconds",
+    "cloudpso_ai_llm_tokens_total",
+    "cloudpso_ai_llm_cancelled_total",
     # TTS
     "cloudpso_ai_tts_requests_total",
     "cloudpso_ai_tts_latency_seconds",
@@ -27,6 +30,13 @@ EXPECTED = {
     # gRPC
     "cloudpso_ai_grpc_audio_frames_total",
     "cloudpso_ai_grpc_events_total",
+}
+
+#: The retired intent stage. A dashboard still querying these shows a flat zero
+#: with no error at all, so their absence is asserted rather than assumed.
+RETIRED = {
+    "cloudpso_ai_nlu_requests_total",
+    "cloudpso_ai_nlu_latency_seconds",
 }
 
 
@@ -43,6 +53,12 @@ def test_metrics_endpoint_advertises_the_expected_series() -> None:
     assert not missing, f"missing metrics: {sorted(missing)}"
 
 
+def test_the_nlu_series_are_gone() -> None:
+    body = client.get("/metrics").text
+    present = {name for name in RETIRED if name in body}
+    assert not present, f"retired series still exported: {sorted(present)}"
+
+
 def test_every_ai_engine_metric_is_namespaced() -> None:
     """Mirror backend-core's convention: this service owns ``cloudpso_ai_*``."""
     body = client.get("/metrics").text
@@ -55,10 +71,36 @@ def test_every_ai_engine_metric_is_namespaced() -> None:
     assert all(name.startswith("cloudpso_ai_") for name in cloudpso_series)
 
 
+def test_pipeline_requests_are_labelled_by_llm_provider() -> None:
+    """The old label was ``nlu_backend``; a renamed label is a silent dashboard
+    break, so the new one is pinned."""
+    body = client.get("/metrics").text
+    pipeline_lines = [
+        line for line in body.splitlines() if line.startswith("cloudpso_ai_pipeline_requests_total")
+    ]
+    assert pipeline_lines, "no pipeline request samples exported"
+    assert any("llm_provider=" in line for line in pipeline_lines)
+    assert not any("nlu_backend=" in line for line in pipeline_lines)
+
+
+def test_first_token_histogram_has_coarse_buckets() -> None:
+    """The shared buckets top out at 10s; a cold model load must not read +Inf."""
+    body = client.get("/metrics").text
+    bucket_lines = [
+        line
+        for line in body.splitlines()
+        if line.startswith("cloudpso_ai_llm_first_token_seconds_bucket")
+    ]
+    assert bucket_lines, "first-token histogram is not exported"
+    assert any('le="60.0"' in line for line in bucket_lines), (
+        "first-token buckets do not reach a cold-start timescale"
+    )
+
+
 # ---------------------------------------------------------------------------
 # The per-stage endpoints must be visible in Prometheus
 #
-# /stt, /nlu and /tts are thin wrappers, but they are still requests served by
+# /stt, /llm and /tts are thin wrappers, but they are still requests served by
 # this process. If they called the engines directly they would be invisible in
 # metrics while the identical call inside a turn was counted -- so this pins
 # that they go through the pipeline.
@@ -82,10 +124,19 @@ def _before_after(series: str, call) -> tuple[float, float]:
     return before, after
 
 
-def test_nlu_endpoint_records_metrics() -> None:
+def test_llm_endpoint_records_metrics() -> None:
     before, after = _before_after(
-        "cloudpso_ai_nlu_requests_total",
-        lambda: client.post("/nlu", json={"text": "I want to book an appointment"}),
+        "cloudpso_ai_llm_requests_total",
+        lambda: client.post("/llm", json={"text": "I want to book an appointment"}),
+    )
+    assert after > before
+
+
+def test_llm_endpoint_records_token_usage() -> None:
+    """The fake reports usage, so the counter must move."""
+    before, after = _before_after(
+        "cloudpso_ai_llm_tokens_total",
+        lambda: client.post("/llm", json={"text": "hello there"}),
     )
     assert after > before
 

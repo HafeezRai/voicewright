@@ -4,27 +4,36 @@ Settings are loaded from the process environment and validated on construction,
 with defaults chosen so the service boots from an entirely empty environment.
 
 Phase 1 declared the model/VAD fields so downstream phases had one place to read
-them from. Phase 3 fills those fields in with the *real* STT/NLU/TTS stack and
-adds the knobs the pipeline needs (backend selection, compute type, gRPC port).
+them from. Phase 3 filled those fields in with the real STT/NLU/TTS stack. The
+intent-classification stage has since been replaced by a generative LLM, so the
+``AI_ENGINE_NLU_*`` fields are gone: `AI_ENGINE_LLM_*` configures the think
+stage and `AI_ENGINE_EMBEDDING_MODEL` the encoder that outlived it.
 
 Nothing here imports an ML runtime at import time: the model names below are
 plain strings that are only resolved to weights when an engine is first used (see
-``app/stt``, ``app/nlu``, ``app/tts``). Device auto-detection probes torch, and
+``app/stt``, ``app/llm``, ``app/tts``). Device auto-detection probes torch, and
 does so lazily -- inside the ``device`` field validator, only when settings are
 constructed, and never fatally (see :func:`_auto_device`).
+
+Note that ``AI_ENGINE_DEVICE`` does **not** affect the LLM: it selects the
+torch device for STT and the embedder, while Ollama (or whichever provider is
+configured) picks its own backend and does its own offload.
 """
 
 from __future__ import annotations
 
+import logging
 import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.llm.prompts import DEFAULT_SYSTEM_PROMPT
+
+logger = logging.getLogger(__name__)
 
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 Environment = Literal["development", "staging", "production"]
@@ -33,14 +42,17 @@ Environment = Literal["development", "staging", "production"]
 Device = Literal["auto", "cpu", "cuda", "mps"]
 STTBackend = Literal["faster-whisper"]
 TTSBackend = Literal["sherpa"]
-# `auto` prefers Laya and falls back to the HuggingFace classifier if Laya is
-# unavailable (not installed, checkpoint unreachable, or failed to load).
-NLUBackend = Literal["auto", "laya", "hf"]
 #: There is exactly one shipped LLM implementation: every provider we support
 #: (Ollama, DeepSeek, vLLM, LM Studio, OpenAI) speaks the same OpenAI-compatible
 #: ``/chat/completions`` protocol, so the provider is a *base URL and model*
 #: choice, not a code path.
 LLMBackend = Literal["openai_compat"]
+
+#: Environment variables the retired NLU stage used to read. ``extra="ignore"``
+#: means a stale one in an ``.env`` or a compose file is *silently* dropped,
+#: which is the worst possible outcome: the deployment looks configured and
+#: quietly is not. They are detected and logged loudly instead.
+_LEGACY_NLU_PREFIX = "AI_ENGINE_NLU_"
 
 #: Directory (relative to the ai-engine package root) used when the configured
 #: model cache is absent or not writable -- the common case on a dev laptop,
@@ -92,7 +104,7 @@ class Settings(BaseSettings):
     # --- CORS (Phase 4) ------------------------------------------------------
     # Comma-separated list of browser origins allowed to call the HTTP API.
     # Defaults to the local dashboard only and never to "*" — a wildcard would
-    # let any page a user visits drive STT/NLU/TTS on their behalf.
+    # let any page a user visits drive STT/LLM/TTS on their behalf.
     cors_allow_origins: str = Field(
         default="http://localhost:5173,http://127.0.0.1:5173",
         alias="CLOUDEPSO_CORS_ALLOW_ORIGINS",
@@ -115,19 +127,11 @@ class Settings(BaseSettings):
     stt_compute_type: str = Field(default="int8", alias="AI_ENGINE_STT_COMPUTE_TYPE")
     stt_beam_size: int = Field(default=1, ge=1, le=10, alias="AI_ENGINE_STT_BEAM_SIZE")
 
-    # --- NLU --------------------------------------------------------------
-    nlu_backend: NLUBackend = Field(default="auto", alias="AI_ENGINE_NLU_BACKEND")
-    #: Laya checkpoint id (see https://huggingface.co/convaiinnovations/laya).
-    nlu_model: str = Field(default="convaiinnovations/laya", alias="AI_ENGINE_NLU_MODEL")
-    #: HuggingFace embedding model used by the fallback classifier.
-    nlu_hf_model: str = Field(
-        default="sentence-transformers/all-MiniLM-L6-v2", alias="AI_ENGINE_NLU_HF_MODEL"
-    )
-
     # --- knowledge (embeddings) ---------------------------------------------
-    #: The MiniLM encoder that outlives the intent model -- it becomes the
-    #: retrieval encoder for the knowledge base. Same weights as ``nlu_hf_model``
-    #: today; ``nlu_hf_model`` goes away with the NLU package.
+    #: The MiniLM encoder that outlived the intent model: it is the retrieval
+    #: encoder for the knowledge base (step 2). It used to be
+    #: ``AI_ENGINE_NLU_HF_MODEL``, named for a fallback classifier that no longer
+    #: exists.
     embedding_model: str = Field(
         default="sentence-transformers/all-MiniLM-L6-v2", alias="AI_ENGINE_EMBEDDING_MODEL"
     )
@@ -223,7 +227,7 @@ class Settings(BaseSettings):
             return _auto_device() if normalised == "auto" else normalised
         return value
 
-    @field_validator("nlu_backend", "stt_backend", "tts_backend", "llm_backend", mode="before")
+    @field_validator("stt_backend", "tts_backend", "llm_backend", mode="before")
     @classmethod
     def _normalise_choice(cls, value: object) -> object:
         return value.lower() if isinstance(value, str) else value
@@ -233,6 +237,28 @@ class Settings(BaseSettings):
     def _normalise_provider(cls, value: object) -> object:
         """Lower-case the provider name: it keys the default base-URL table."""
         return value.strip().lower() if isinstance(value, str) else value
+
+    @model_validator(mode="after")
+    def _warn_on_retired_nlu_config(self) -> Settings:
+        """Shout about ``AI_ENGINE_NLU_*`` instead of silently ignoring it.
+
+        ``extra="ignore"`` is deliberate -- an unknown variable must not stop the
+        service from booting -- but silence is exactly the wrong response to a
+        *retired* one: the deployment would look configured while the setting it
+        is counting on does nothing. Nothing here raises; the service still
+        starts, it just says so.
+        """
+        legacy = sorted(
+            key for key in os.environ if key.upper().startswith(_LEGACY_NLU_PREFIX)
+        )
+        if legacy:
+            logger.warning(
+                "ignoring retired NLU configuration %s: intent classification was "
+                "replaced by the LLM stage. Use AI_ENGINE_LLM_* instead, and "
+                "AI_ENGINE_EMBEDDING_MODEL for the encoder.",
+                ", ".join(legacy),
+            )
+        return self
 
     @property
     def is_production(self) -> bool:
@@ -273,7 +299,7 @@ class Settings(BaseSettings):
 
         This is where ``huggingface_hub`` puts ``models--<org>--<name>``
         directories when it is driven by ``HF_HOME``, and it is what the STT and
-        HF-NLU engines are pointed at explicitly so all three stages share one
+        engines are pointed at explicitly so every stage shares one
         layout instead of three.
         """
         return self.hf_home / "hub"

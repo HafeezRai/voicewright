@@ -1,14 +1,23 @@
 """Shared fixtures for the ai-engine test suite.
 
-The suite runs **real inference** -- real Whisper transcription, real VITS
-synthesis, real NLU. That is the point of Phase 3, so nothing here is mocked.
-What this file does control is *which* real things run by default:
+The suite runs **real inference** where inference is ours -- real Whisper
+transcription, real VITS synthesis. The point of Phase 3 was that nothing is
+mocked, and that still holds for the two stages this service owns.
 
-* ``AI_ENGINE_NLU_BACKEND=hf`` -- the fast, deterministic path (a ~90 MB
-  embedding model) is the default for the suite, so a plain ``pytest`` does not
-  pull the 842 MB Laya checkpoint. The Laya backend has its own test
-  (``test_laya.py``) which skips with a clear reason when the checkpoint is not
-  cached, and runs for real when it is.
+The middle stage is different, and is the one deliberate substitution here. The
+LLM is a *remote* provider, so "real" would mean "requires Ollama to be running
+with the right model pulled" -- a test suite that fails on a bare checkout for
+reasons that have nothing to do with this code. :class:`FakeLLM` therefore stands
+in: deterministic, no network, emitting real deltas through the same contract the
+shipped client implements, and able to fail on demand. The live wire protocol
+has its own test (``test_llm_ollama_live.py``), which skips cleanly when Ollama
+or the model is absent.
+
+Environment the suite pins, before any ``app`` import:
+
+* ``AI_ENGINE_LLM_WARMUP=false`` -- no background model load during the HTTP
+  tests. Without this, ``TestClient`` would start a warm-up thread that reaches
+  for a real Ollama on every run.
 * ``AI_ENGINE_GRPC_ENABLED=false`` -- no port is bound during the HTTP tests; the
   gRPC test builds its own server on an ephemeral port.
 
@@ -27,14 +36,13 @@ from pathlib import Path
 import pytest
 
 # --- environment defaults (must precede any `app` import) -------------------
-os.environ.setdefault("AI_ENGINE_NLU_BACKEND", "hf")
+os.environ.setdefault("AI_ENGINE_LLM_WARMUP", "false")
 os.environ.setdefault("AI_ENGINE_GRPC_ENABLED", "false")
 os.environ.setdefault("AI_ENGINE_LOG_LEVEL", "WARNING")
 
 from app.cancellation import CancelToken
 from app.config import configure_hf_home, get_settings
 from app.llm.base import ChatMessage, LLMEngine, LLMResult, LLMUsage
-from app.nlu import HFIntentNLU
 from app.pipeline import VoicePipeline
 from app.stt import FasterWhisperSTT
 from app.tts import SherpaTTS
@@ -187,31 +195,40 @@ def tts_engine() -> SherpaTTS:
     engine.close()
 
 
-@pytest.fixture(scope="session")
-def hf_nlu_engine() -> HFIntentNLU:
-    engine = HFIntentNLU(_settings.nlu_hf_model, cache_dir=str(_settings.hf_hub_cache))
-    # Loading downloads ~90 MB on first use; treat an unreachable Hub as a skip.
-    try:
-        engine.load()
-    except Exception as exc:  # pragma: no cover - offline dev box
-        pytest.skip(f"HF NLU model unavailable: {exc}; {FETCH_HINT}")
-    yield engine
-    engine.close()
+@pytest.fixture
+def fake_llm() -> FakeLLM:
+    """A fresh scripted LLM per test, so recorded calls cannot leak between them."""
+    return FakeLLM()
 
 
-@pytest.fixture(scope="session")
-def pipeline_engine(stt_engine, hf_nlu_engine, tts_engine) -> VoicePipeline:
-    """The full real pipeline, backed by the fast NLU path."""
+@pytest.fixture
+def pipeline_engine(stt_engine, tts_engine, fake_llm) -> VoicePipeline:
+    """The real pipeline: real Whisper and real VITS, scripted generation.
+
+    Function-scoped rather than session-scoped because the LLM changes per test;
+    constructing a :class:`VoicePipeline` loads nothing, so this costs nothing --
+    the two expensive engines are still session-scoped.
+    """
     return VoicePipeline(
         stt_engine,
-        hf_nlu_engine,
+        fake_llm,
         tts_engine,
         sample_rate=_settings.sample_rate_hz,
         chunk_samples=_settings.tts_chunk_samples,
     )
 
 
-@pytest.fixture
-def fake_llm() -> FakeLLM:
-    """A fresh scripted LLM per test, so recorded calls cannot leak between them."""
-    return FakeLLM()
+# ---------------------------------------------------------------------------
+# The served application
+#
+# `app.main` builds its pipeline once, at import, from settings -- i.e. pointed
+# at a real Ollama. The HTTP tests drive that exact pipeline object (it is what
+# `GET /metrics` observes), so the fake has to be installed *there*: a fixture
+# the app cannot see would leave `POST /llm` reaching for a model that may not
+# be running. Done once, here, rather than per-test, so every ASGI test sees the
+# same deterministic engine.
+# ---------------------------------------------------------------------------
+from app import main as _app_main  # noqa: E402  (must follow the env defaults)
+
+_app_main.pipeline.llm.close()
+_app_main.pipeline.llm = FakeLLM()

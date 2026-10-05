@@ -1,14 +1,19 @@
 """FastAPI application entrypoint for ai-engine.
 
-Phase 1 exposed ``GET /health`` only. Phase 3 adds the real STT -> NLU -> TTS
+Phase 1 exposed ``GET /health`` only. Phase 3 added the real STT -> NLU -> TTS
 pipeline, its Prometheus metrics, and a gRPC server (the ``VoiceGateway``
-contract) started alongside HTTP.
+contract) started alongside HTTP. The intent-classification stage has since been
+replaced by a generative LLM, so the middle stage is now ``POST /llm`` and the
+pipeline is ``STT -> LLM -> TTS``.
 
 The ``GET /health`` contract is frozen from Phase 1 and is unchanged.
 
 No model is loaded at import or startup: every engine is constructed lazily and
 resolves its weights on first use, so the process starts (and answers ``/health``)
-in milliseconds and never downloads anything until a request needs it.
+in milliseconds and never downloads anything until a request needs it. The LLM
+is the one exception, and deliberately so: ``AI_ENGINE_LLM_WARMUP`` warms it on a
+*background thread*, so a cold multi-gigabyte model load is paid before the first
+caller arrives without ever delaying ``/health``.
 """
 
 from __future__ import annotations
@@ -17,7 +22,9 @@ import asyncio
 import base64
 import io
 import logging
-from collections.abc import AsyncIterator
+import threading
+from collections import OrderedDict
+from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 
 import grpc
@@ -30,6 +37,7 @@ from pydantic import BaseModel, Field
 from app.audio_io import to_wav_bytes
 from app.config import get_settings
 from app.grpc.server import start_grpc_server
+from app.llm.history import ConversationHistory
 from app.pipeline import VoicePipeline, build_pipeline
 
 settings = get_settings()
@@ -44,10 +52,78 @@ logger = logging.getLogger(__name__)
 #: The single process-wide pipeline. Constructing it loads no weights.
 pipeline: VoicePipeline = build_pipeline(settings)
 
+#: How many distinct sessions keep history in memory. A demo has a handful; the
+#: cap exists so an unauthenticated caller cannot grow the process without bound
+#: by sending a fresh ``session_id`` on every request.
+_MAX_SESSIONS = 256
+
+
+class SessionHistoryStore:
+    """The smallest thing that can carry conversation history across requests.
+
+    The pipeline is stateless -- it is shared by every session in the process --
+    so history has to live where the session does. This is a locked LRU of
+    :class:`ConversationHistory`, one per ``session_id``. A request without a
+    ``session_id`` gets no history at all, which makes the default behaviour
+    identical to a pipeline with no memory.
+    """
+
+    def __init__(self, max_turns: int, max_sessions: int = _MAX_SESSIONS):
+        self._max_turns = max_turns
+        self._max_sessions = max_sessions
+        self._lock = threading.Lock()
+        self._sessions: OrderedDict[str, ConversationHistory] = OrderedDict()
+
+    @property
+    def enabled(self) -> bool:
+        return self._max_turns > 0
+
+    def snapshot(self, session_id: str | None) -> list:
+        """Prior messages for this session (empty for no/unknown session)."""
+        if not session_id or not self.enabled:
+            return []
+        with self._lock:
+            history = self._sessions.get(session_id)
+            if history is None:
+                return []
+            self._sessions.move_to_end(session_id)
+            return history.snapshot()
+
+    def record(self, session_id: str | None, user_text: str, assistant_text: str) -> None:
+        """Append one exchange, creating the session if needed."""
+        if not session_id or not self.enabled:
+            return
+        if not user_text.strip() or not assistant_text.strip():
+            return
+        with self._lock:
+            history = self._sessions.get(session_id)
+            if history is None:
+                history = ConversationHistory(self._max_turns)
+                self._sessions[session_id] = history
+            else:
+                self._sessions.move_to_end(session_id)
+            while len(self._sessions) > self._max_sessions:
+                self._sessions.popitem(last=False)
+            history.add_turn(user_text, assistant_text)
+
+
+_sessions = SessionHistoryStore(settings.llm_history_turns)
+
+
+def _warm_llm(target: VoicePipeline) -> None:
+    """Load the model off the request path. Failures are logged, never raised."""
+    try:
+        target.llm.load()
+    except Exception:
+        logger.warning(
+            "LLM warm-up failed; the first turn will pay the model-load cost",
+            exc_info=True,
+        )
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Start the gRPC server alongside HTTP; shut everything down cleanly."""
+    """Start the gRPC server and (optionally) warm the LLM; shut down cleanly."""
     grpc_server: grpc.aio.Server | None = None
     if settings.grpc_enabled:
         try:
@@ -56,11 +132,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         except Exception:  # pragma: no cover - port clash etc. must not kill HTTP
             logger.exception("gRPC server failed to start; HTTP continues")
             grpc_server = None
+
+    # A background thread, not an await: /health must answer immediately even
+    # while 4.66 GB of weights are being paged in.
+    if settings.llm_warmup:
+        threading.Thread(
+            target=_warm_llm, args=(pipeline,), name="llm-warmup", daemon=True
+        ).start()
+
     try:
         yield
     finally:
         pipeline.stt.close()
-        pipeline.nlu.close()
+        pipeline.llm.close()
         pipeline.tts.close()
         if grpc_server is not None:
             await grpc_server.stop(grace=1.0)
@@ -69,7 +153,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(
     title="CloudPSO Voice Agent — ai-engine",
     version="0.3.0",
-    description="STT -> NLU -> TTS pipeline service (Phase 3).",
+    description="STT -> LLM -> TTS pipeline service.",
     lifespan=lifespan,
 )
 
@@ -106,23 +190,19 @@ async def metrics() -> Response:
 # ---------------------------------------------------------------------------
 
 
-class NLURequest(BaseModel):
+class LLMRequest(BaseModel):
+    """A generation request. ``/nlu`` this is not: the reply is free-form prose."""
+
     text: str = Field(min_length=1, max_length=4000)
+    #: Overrides AI_ENGINE_LLM_SYSTEM_PROMPT for this call.
+    system_prompt: str | None = Field(default=None, max_length=4000)
+    #: Opt in to conversation memory; omitted means a single stateless turn.
+    session_id: str | None = Field(default=None, max_length=200)
 
 
 class TTSRequest(BaseModel):
     text: str = Field(min_length=1, max_length=4000)
     speed: float | None = Field(default=None, gt=0.0, le=4.0)
-
-
-def _intent_payload(intent) -> dict:
-    return {
-        "intent": intent.intent,
-        "confidence": round(float(intent.confidence), 4),
-        "backend": intent.backend,
-        "slots": {s.name: s.value for s in intent.slots},
-        "scores": {k: round(float(v), 4) for k, v in (intent.scores or {}).items()},
-    }
 
 
 @app.post("/stt")
@@ -146,14 +226,22 @@ async def stt(request: Request) -> dict:
     }
 
 
-@app.post("/nlu")
-async def nlu(payload: NLURequest) -> dict:
-    """Classify a transcript into an intent (no audio involved)."""
+@app.post("/llm")
+async def llm(payload: LLMRequest) -> dict:
+    """Generate a reply from a transcript (no audio involved)."""
+    history = _sessions.snapshot(payload.session_id)
     try:
-        intent = await _run_off_loop(pipeline.classify, payload.text)
+        result = await _run_off_loop(
+            lambda: pipeline.generate(
+                payload.text,
+                system_prompt=payload.system_prompt,
+                history=history,
+            )
+        )
     except Exception as exc:
-        _raise_unavailable("NLU", exc)
-    return _intent_payload(intent)
+        _raise_unavailable("LLM", exc)
+    _sessions.record(payload.session_id, payload.text, result.text)
+    return result.as_dict()
 
 
 @app.post("/tts")
@@ -177,23 +265,40 @@ async def tts(payload: TTSRequest) -> Response:
 
 
 @app.post("/pipeline")
-async def run_pipeline(request: Request, include_audio: bool = False) -> dict:
-    """Full STT -> NLU -> TTS turn from a WAV body."""
+async def run_pipeline(
+    request: Request,
+    include_audio: bool = False,
+    system_prompt: str | None = None,
+    session_id: str | None = None,
+) -> dict:
+    """Full STT -> LLM -> TTS turn from a WAV body.
+
+    ``system_prompt`` overrides the configured persona for this call, and
+    ``session_id`` opts in to conversation memory.
+    """
     body = await request.body()
     if not body:
         raise HTTPException(status_code=400, detail="empty request body; send WAV bytes")
+    history: Sequence = _sessions.snapshot(session_id)
     try:
         audio, rate = await _read_wav_bytes(body)
-        result = await _run_off_loop(pipeline.process_turn, audio, rate)
+        result = await _run_off_loop(
+            lambda: pipeline.process_turn(
+                audio, rate, system_prompt=system_prompt, history=history
+            )
+        )
     except HTTPException:
         raise
     except Exception as exc:
         _raise_unavailable("pipeline", exc)
 
+    _sessions.record(session_id, result.transcript.text, result.reply_text)
     payload = {
         "transcript": result.transcript.text,
-        "intent": _intent_payload(result.intent),
         "reply_text": result.reply_text,
+        "model": result.llm.model,
+        "provider": result.llm.provider,
+        "usage": result.llm.usage.as_dict() if result.llm.usage else None,
         "audio": {
             "sample_rate": result.speech.sample_rate,
             "duration_s": round(result.speech.duration_s, 3),

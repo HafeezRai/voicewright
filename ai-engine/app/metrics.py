@@ -36,19 +36,6 @@ STT_AUDIO_SECONDS = Histogram(
     buckets=(0.5, 1, 2, 5, 10, 30, 60, 120),
 )
 
-# --- NLU ---------------------------------------------------------------------
-NLU_REQUESTS = Counter(
-    "cloudpso_ai_nlu_requests_total",
-    "NLU classification requests, labelled by backend and outcome.",
-    ["backend", "status"],
-)
-NLU_LATENCY = Histogram(
-    "cloudpso_ai_nlu_latency_seconds",
-    "Wall-clock time to classify one utterance.",
-    ["backend"],
-    buckets=_LATENCY_BUCKETS,
-)
-
 # --- LLM ---------------------------------------------------------------------
 #: First-token latency on a *cold* local model is dominated by loading several
 #: gigabytes of weights, which the shared buckets (topping out at 10s) would
@@ -112,12 +99,12 @@ TTS_CANCELLED = Counter(
 # --- end-to-end pipeline -----------------------------------------------------
 PIPELINE_REQUESTS = Counter(
     "cloudpso_ai_pipeline_requests_total",
-    "Full STT -> NLU -> TTS turns, labelled by outcome and chosen NLU backend.",
-    ["status", "nlu_backend"],
+    "Full STT -> LLM -> TTS turns, labelled by outcome and LLM provider.",
+    ["status", "llm_provider"],
 )
 PIPELINE_LATENCY = Histogram(
     "cloudpso_ai_pipeline_latency_seconds",
-    "Wall-clock time for one full STT -> NLU -> TTS turn.",
+    "Wall-clock time for one full STT -> LLM -> TTS turn.",
     buckets=_LATENCY_BUCKETS,
 )
 

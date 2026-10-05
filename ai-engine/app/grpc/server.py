@@ -4,7 +4,7 @@ Phase 2's gateway acknowledges audio frames without interpreting them, because
 interpreting audio is this service's job. This servicer is the other half:
 
 * ``StreamAudio`` buffers the ingress frames for a session, and when the client
-  half-closes, runs the real STT -> NLU -> TTS pipeline and streams the results
+  half-closes, runs the real STT -> LLM -> TTS pipeline and streams the results
   back as ``TranscriptFinal`` followed by ``SynthesisChunk`` frames. Partial
   transcripts are emitted for the frames seen so far when the stream is long,
   so a caller is not left staring at silence.
@@ -132,8 +132,11 @@ class AIVoiceServicer(pb_grpc.VoiceGatewayServicer):
                 GRPC_EVENTS.labels(kind="synthesis_chunk").inc()
 
             logger.debug(
-                "StreamAudio session=%s intent=%s reply=%.2fs",
-                session_id or "?", result.intent.intent, result.speech.duration_s,
+                "StreamAudio session=%s model=%s/%s reply=%.2fs",
+                session_id or "?",
+                result.llm.provider,
+                result.llm.model,
+                result.speech.duration_s,
             )
         finally:
             self._active_streams -= 1

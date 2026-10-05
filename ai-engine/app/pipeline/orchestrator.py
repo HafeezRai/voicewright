@@ -1,13 +1,13 @@
-"""STT -> NLU -> TTS orchestration.
+"""STT -> LLM -> TTS orchestration.
 
-Two paths over the same three stages:
+Three paths over the same three stages:
 
 * :meth:`VoicePipeline.process_turn` -- the **batch** path. Audio in, a
-  :class:`TurnResult` (transcript, intent, synthesised reply) out. This is what
-  the HTTP API, the gRPC servicer and the end-to-end test use.
+  :class:`TurnResult` (transcript, generated reply, synthesised speech) out.
+  This is what the HTTP API, the gRPC servicer and the end-to-end test use.
 
 * :meth:`VoicePipeline.stream_turn` -- the **streaming** path. Same stages, but
-  the reply audio is yielded chunk by chunk and can be cut short mid-utterance.
+  the reply is emitted as it is produced and the turn can be cut short.
 
 * :meth:`VoicePipeline.process_stream` -- the **chunked ingress** path: audio
   arrives as a sequence of chunks (as it does over gRPC / WebRTC), is buffered,
@@ -15,22 +15,42 @@ Two paths over the same three stages:
   accuracy on a 300 ms fragment is poor, so the honest design is to accumulate a
   full utterance (the gateway's VAD decides where that ends) and transcribe once.
 
-Where barge-in cancels in-flight TTS
-------------------------------------
-In :meth:`stream_turn`. The loop pulls audio chunks from
-:meth:`TTSEngine.stream` and, before each one, tests
-``PlaybackSink.is_speaking`` / the sink's cancel token. When the barge-in
-controller (backend-core) calls ``PlaybackSink.stop()`` -- which it does on
-``min_speech_ms`` of continuous user speech -- the token is set and:
+Where the reply comes from
+--------------------------
+The middle stage used to be a 7-way intent classifier plus a template table.
+It is now a generative LLM: ``STT -> llm.generate(system_prompt, text) -> TTS``.
+That is what makes a configurable persona, and later a knowledge base, possible
+at all -- a new "intent" is now a prompt, not code.
 
-  * the loop stops yielding immediately (playback ends at the current chunk), and
-  * the cancel token is passed into ``TTSEngine.stream``, so a backend that can
-    interrupt synthesis (sherpa-onnx does, via its generation callback) aborts
-    the forward pass rather than finishing an utterance nobody will hear.
+Message assembly lives in one place, :meth:`VoicePipeline._build_messages`,
+because that is the single seam step 2 (retrieval) splices retrieved snippets
+into.
 
-Everything before synthesis (STT, NLU) is not cancellable: those are short,
-bounded calls, and killing them mid-flight would leave the session in a worse
-state than letting them finish.
+History is a per-call *parameter*, never pipeline state
+-------------------------------------------------------
+The pipeline is stateless -- it is shared by every session in the process, and
+``to_thread`` runs turns concurrently. Whoever owns a session owns its history
+and hands the pipeline a snapshot; :meth:`_build_messages` never mutates it.
+
+Where barge-in cancels
+----------------------
+Two cancel points, both driven by the sink's :class:`CancelToken`:
+
+* before synthesis starts, which is the point a turn abandoned *while the model
+  was still generating* is detected. ``sink.start()`` is deliberately called
+  *before* the LLM call, so the agent is interruptible while it is thinking --
+  otherwise a caller who talks over the silence is ignored;
+* between audio chunks below, which ends playback at the current chunk. The
+  token is also passed into :meth:`TTSEngine.stream`, so a backend that can
+  interrupt synthesis (sherpa-onnx does, via its generation callback) aborts the
+  forward pass rather than finishing an utterance nobody will hear.
+
+STT is not cancellable: it is a short, bounded call, and killing it mid-flight
+would leave the session in a worse state than letting it finish.
+
+This is the "generate fully, then synthesise" shape: the whole reply is produced
+before the first audio chunk is emitted. Sentence-by-sentence streaming, which
+gets the first audio out in about a second, is a separate change.
 """
 
 from __future__ import annotations
@@ -38,15 +58,26 @@ from __future__ import annotations
 import enum
 import logging
 import time
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass, field
 
 import numpy as np
 
 from app.audio_io import duration_s
+from app.llm.base import (
+    ChatMessage,
+    LLMEngine,
+    LLMResult,
+    LLMTimeoutError,
+    LLMUnavailableError,
+)
+from app.llm.prompts import DEFAULT_SYSTEM_PROMPT
 from app.metrics import (
-    NLU_LATENCY,
-    NLU_REQUESTS,
+    LLM_CANCELLED,
+    LLM_FIRST_TOKEN,
+    LLM_LATENCY,
+    LLM_REQUESTS,
+    LLM_TOKENS,
     PIPELINE_LATENCY,
     PIPELINE_REQUESTS,
     STT_AUDIO_SECONDS,
@@ -57,20 +88,23 @@ from app.metrics import (
     TTS_LATENCY,
     TTS_REQUESTS,
 )
-from app.nlu.base import IntentResult, NLUEngine
-from app.pipeline.responder import respond
 from app.stt.base import STTEngine, TranscriptionResult
 from app.tts.base import CancelToken, SynthesisResult, TTSEngine
 from app.tts.sink import TTSPlaybackSink
 
 logger = logging.getLogger(__name__)
 
+#: Errors that mean "the provider did not answer", as opposed to a bug in our
+#: own code. Only these may be swallowed by ``fallback_reply``.
+_LLM_FAILURES = (LLMUnavailableError, LLMTimeoutError)
+
 
 class EventKind(enum.StrEnum):
     """Kinds of :class:`PipelineEvent` emitted by :meth:`stream_turn`."""
 
     TRANSCRIPT_FINAL = "transcript_final"
-    INTENT = "intent"
+    #: A piece of the reply text, as it is generated.
+    REPLY_DELTA = "reply_delta"
     AUDIO_CHUNK = "audio_chunk"
     DONE = "done"
     CANCELLED = "cancelled"
@@ -81,8 +115,8 @@ class PipelineEvent:
     """One step of a streaming turn."""
 
     kind: EventKind
+    #: The transcript, a reply delta, or the full reply on ``DONE``/``CANCELLED``.
     text: str | None = None
-    intent: IntentResult | None = None
     audio: np.ndarray | None = None
     sample_rate: int = 0
 
@@ -92,14 +126,20 @@ class TurnResult:
     """Everything one batch turn produced."""
 
     transcript: TranscriptionResult
-    intent: IntentResult
+    llm: LLMResult
     reply_text: str
     speech: SynthesisResult
     stt_latency_s: float = 0.0
-    nlu_latency_s: float = 0.0
+    llm_latency_s: float = 0.0
     tts_latency_s: float = 0.0
     total_latency_s: float = 0.0
     cancelled: bool = False
+    #: The system prompt this turn actually ran with, after the per-call
+    #: override was applied. Recorded because "which persona answered?" is the
+    #: first question about any turn.
+    system_prompt: str = ""
+    #: Number of prior messages replayed into the prompt.
+    history_turns: int = 0
     #: Per-stage timings, for the dashboard and for latency accounting.
     timings: dict[str, float] = field(default_factory=dict)
 
@@ -114,24 +154,31 @@ class VoicePipeline:
     def __init__(
         self,
         stt: STTEngine,
-        nlu: NLUEngine,
+        llm: LLMEngine,
         tts: TTSEngine,
         *,
         sample_rate: int = 16000,
         chunk_samples: int = 3200,
+        system_prompt: str = DEFAULT_SYSTEM_PROMPT,
+        fallback_reply: str = "",
     ):
         self.stt = stt
-        self.nlu = nlu
+        self.llm = llm
         self.tts = tts
         self.sample_rate = sample_rate
         self.chunk_samples = chunk_samples
+        #: The configured persona. A caller may override it per turn; blank
+        #: disables the system message entirely.
+        self.system_prompt = system_prompt
+        #: Spoken when the provider is unreachable. Empty means fail loudly.
+        self.fallback_reply = fallback_reply
 
     # -- single stages (public, metric-recording) ---------------------------
     #
-    # The HTTP API exposes /stt, /nlu and /tts individually. They go through
+    # The HTTP API exposes /stt, /llm and /tts individually. They go through
     # these rather than the engines directly so that every path into a stage
-    # records the same metrics -- otherwise calling /nlu would be invisible in
-    # Prometheus while the identical NLU call inside a turn was counted.
+    # records the same metrics -- otherwise calling /llm would be invisible in
+    # Prometheus while the identical generation inside a turn was counted.
     def transcribe(self, audio: np.ndarray | str, sample_rate: int | None = None):
         """Transcribe one utterance, recording STT metrics."""
         t0 = time.perf_counter()
@@ -146,9 +193,15 @@ class VoicePipeline:
             STT_AUDIO_SECONDS.observe(transcript.duration_s)
         return transcript
 
-    def classify(self, text: str) -> IntentResult:
-        """Classify one utterance, recording NLU metrics."""
-        return self._classify(text)
+    def generate(
+        self,
+        text: str,
+        *,
+        system_prompt: str | None = None,
+        history: Sequence[ChatMessage] | None = None,
+    ) -> LLMResult:
+        """Generate one reply, recording LLM metrics."""
+        return self._generate(text, system_prompt=system_prompt, history=history)
 
     def synthesize(self, text: str, *, speed: float | None = None) -> SynthesisResult:
         """Synthesise one utterance, recording TTS metrics."""
@@ -159,24 +212,30 @@ class VoicePipeline:
         self,
         audio: np.ndarray | str,
         sample_rate: int | None = None,
+        *,
+        system_prompt: str | None = None,
+        history: Sequence[ChatMessage] | None = None,
     ) -> TurnResult:
-        """Run one full STT -> NLU -> TTS turn and return the result."""
+        """Run one full STT -> LLM -> TTS turn and return the result."""
         started = time.perf_counter()
 
         t0 = time.perf_counter()
         try:
             transcript = self.transcribe(audio, sample_rate)
         except Exception:
-            PIPELINE_REQUESTS.labels(status="error", nlu_backend="?").inc()
+            PIPELINE_REQUESTS.labels(status="error", llm_provider="?").inc()
             raise
         stt_s = time.perf_counter() - t0
 
-        return self._turn_from_transcript(transcript, stt_s, started)
+        return self._turn_from_transcript(transcript, stt_s, started, system_prompt, history)
 
     def process_stream(
         self,
         chunks: Iterable[np.ndarray],
         sample_rate: int | None = None,
+        *,
+        system_prompt: str | None = None,
+        history: Sequence[ChatMessage] | None = None,
     ) -> TurnResult:
         """Buffer an audio chunk stream into one utterance, then run it.
 
@@ -188,14 +247,7 @@ class VoicePipeline:
         audio = np.concatenate(parts) if parts else np.zeros(0, dtype=np.float32)
         logger.debug("ingested %.2fs of audio from %d chunks",
                      duration_s(audio, rate), len(parts))
-        return self.process_turn(audio, rate)
-
-    def process_text(self, text: str) -> tuple[IntentResult, str, SynthesisResult]:
-        """Run NLU -> TTS only (no audio in). Used by the /nlu and /tts tests."""
-        intent = self._classify(text)
-        reply = respond(intent)
-        speech = self._synthesize(reply)
-        return intent, reply, speech
+        return self.process_turn(audio, rate, system_prompt=system_prompt, history=history)
 
     # -- streaming path -----------------------------------------------------
     def stream_turn(
@@ -204,11 +256,12 @@ class VoicePipeline:
         sample_rate: int | None = None,
         *,
         sink: TTSPlaybackSink | None = None,
+        system_prompt: str | None = None,
+        history: Sequence[ChatMessage] | None = None,
     ) -> Iterator[PipelineEvent]:
-        """Yield the turn as it happens, cutting the reply off on barge-in.
+        """Yield the turn as it happens, cutting it off on barge-in.
 
-        The cancel point is the ``for chunk in ...`` loop below; see the module
-        docstring for the full explanation.
+        See the module docstring for the two cancel points.
         """
         started = time.perf_counter()
         t0 = time.perf_counter()
@@ -216,19 +269,29 @@ class VoicePipeline:
         stt_s = time.perf_counter() - t0
         yield PipelineEvent(EventKind.TRANSCRIPT_FINAL, text=transcript.text)
 
-        # Go through _classify so the streaming path records the same NLU
-        # metrics as the batch path.
-        t1 = time.perf_counter()
-        intent = self._classify(transcript.text)
-        nlu_s = time.perf_counter() - t1
-        logger.debug("stream turn: stt=%.3fs nlu=%.3fs backend=%s",
-                     stt_s, nlu_s, intent.backend)
-        yield PipelineEvent(EventKind.INTENT, intent=intent)
-
-        reply = respond(intent)
         sink = sink or TTSPlaybackSink()
+        # Started *before* generation, so a caller who talks over the silence
+        # while the model is thinking is heard rather than ignored.
         sink.start()
         token: CancelToken = sink.cancel_token
+
+        t1 = time.perf_counter()
+        llm_result = self._generate(transcript.text, system_prompt=system_prompt, history=history)
+        llm_s = time.perf_counter() - t1
+        provider = self._provider()
+        logger.debug("stream turn: stt=%.3fs llm=%.3fs provider=%s",
+                     stt_s, llm_s, provider)
+
+        # The whole reply is one delta in this shape of the pipeline.
+        yield PipelineEvent(EventKind.REPLY_DELTA, text=llm_result.text)
+
+        # ---- BARGE-IN CANCEL POINT: the turn was abandoned while thinking ---
+        if token.cancelled or not sink.is_speaking:
+            LLM_CANCELLED.labels(provider=provider).inc()
+            LLM_REQUESTS.labels(provider=provider, status="cancelled").inc()
+            yield PipelineEvent(EventKind.CANCELLED, text=llm_result.text)
+            return
+        # ---------------------------------------------------------------------
 
         t2 = time.perf_counter()
         first_chunk_s: float | None = None
@@ -236,7 +299,7 @@ class VoicePipeline:
         cancelled = False
         try:
             for chunk in self.tts.stream(
-                reply, chunk_samples=self.chunk_samples, cancel=token
+                llm_result.text, chunk_samples=self.chunk_samples, cancel=token
             ):
                 # ---- BARGE-IN CANCEL POINT ------------------------------
                 if not sink.is_speaking or token.cancelled:
@@ -266,29 +329,89 @@ class VoicePipeline:
         if cancelled:
             TTS_CANCELLED.inc()
             TTS_REQUESTS.labels(status="cancelled").inc()
-            yield PipelineEvent(EventKind.CANCELLED, text=reply)
+            yield PipelineEvent(EventKind.CANCELLED, text=llm_result.text)
             return
 
         TTS_REQUESTS.labels(status="ok").inc()
         if first_chunk_s is not None:
             logger.debug("tts first chunk in %.3fs", first_chunk_s)
-        PIPELINE_REQUESTS.labels(status="ok", nlu_backend=intent.backend).inc()
+        PIPELINE_REQUESTS.labels(status="ok", llm_provider=provider).inc()
         PIPELINE_LATENCY.observe(time.perf_counter() - started)
-        yield PipelineEvent(EventKind.DONE, text=reply, intent=intent)
+        yield PipelineEvent(EventKind.DONE, text=llm_result.text)
 
     # -- internals ----------------------------------------------------------
-    def _classify(self, text: str) -> IntentResult:
-        t1 = time.perf_counter()
+    def _provider(self) -> str:
+        """Label for the metrics: the provider, falling back to the engine name."""
+        return self.llm.provider or self.llm.name
+
+    def _system_prompt_for(self, override: str | None) -> str:
+        return self.system_prompt if override is None else override
+
+    def _build_messages(
+        self,
+        text: str,
+        system_prompt: str | None,
+        history: Sequence[ChatMessage] | None,
+    ) -> list[ChatMessage]:
+        """Assemble the prompt: system, then replayed turns, then the utterance.
+
+        The single seam step 2's retrieval splices into: retrieved snippets
+        become another system message (or are appended to the existing one)
+        without anything else in this class changing.
+        """
+        messages: list[ChatMessage] = []
+        prompt = self._system_prompt_for(system_prompt)
+        if prompt:
+            messages.append(ChatMessage(role="system", content=prompt))
+        if history:
+            messages.extend(history)
+        messages.append(ChatMessage(role="user", content=text))
+        return messages
+
+    def _generate(
+        self,
+        text: str,
+        *,
+        system_prompt: str | None,
+        history: Sequence[ChatMessage] | None,
+    ) -> LLMResult:
+        provider = self._provider()
+        messages = self._build_messages(text, system_prompt, history)
+        started = time.perf_counter()
         try:
-            intent = self.nlu.classify(text)
-        except Exception:
-            NLU_REQUESTS.labels(backend=self.nlu.name, status="error").inc()
-            raise
-        NLU_LATENCY.labels(backend=intent.backend or self.nlu.name).observe(
-            time.perf_counter() - t1
-        )
-        NLU_REQUESTS.labels(backend=intent.backend or self.nlu.name, status="ok").inc()
-        return intent
+            result = self.llm.generate(messages)
+        except _LLM_FAILURES as exc:
+            LLM_REQUESTS.labels(provider=provider, status="error").inc()
+            if not self.fallback_reply:
+                raise
+            logger.warning(
+                "LLM unavailable (%s); speaking the configured fallback reply", exc
+            )
+            LLM_LATENCY.labels(provider=provider).observe(time.perf_counter() - started)
+            LLM_REQUESTS.labels(provider=provider, status="fallback").inc()
+            return LLMResult(
+                text=self.fallback_reply,
+                model=self.llm.model,
+                provider=provider,
+                finish_reason="fallback",
+                fallback=True,
+                latency_s=time.perf_counter() - started,
+            )
+
+        LLM_REQUESTS.labels(provider=provider, status="ok").inc()
+        LLM_LATENCY.labels(provider=provider).observe(time.perf_counter() - started)
+        if result.first_token_s is not None:
+            LLM_FIRST_TOKEN.labels(provider=provider).observe(result.first_token_s)
+        if result.usage is not None:
+            if result.usage.prompt_tokens:
+                LLM_TOKENS.labels(provider=provider, kind="prompt").inc(
+                    result.usage.prompt_tokens
+                )
+            if result.usage.completion_tokens:
+                LLM_TOKENS.labels(provider=provider, kind="completion").inc(
+                    result.usage.completion_tokens
+                )
+        return result
 
     def _synthesize(self, text: str, *, speed: float | None = None) -> SynthesisResult:
         t2 = time.perf_counter()
@@ -304,28 +427,34 @@ class VoicePipeline:
         return speech
 
     def _turn_from_transcript(
-        self, transcript: TranscriptionResult, stt_s: float, started: float
+        self,
+        transcript: TranscriptionResult,
+        stt_s: float,
+        started: float,
+        system_prompt: str | None,
+        history: Sequence[ChatMessage] | None,
     ) -> TurnResult:
         t1 = time.perf_counter()
-        intent = self._classify(transcript.text)
-        nlu_s = time.perf_counter() - t1
+        llm_result = self._generate(transcript.text, system_prompt=system_prompt, history=history)
+        llm_s = time.perf_counter() - t1
 
-        reply = respond(intent)
         t2 = time.perf_counter()
-        speech = self._synthesize(reply)
+        speech = self._synthesize(llm_result.text)
         tts_s = time.perf_counter() - t2
         total = time.perf_counter() - started
 
-        PIPELINE_REQUESTS.labels(status="ok", nlu_backend=intent.backend).inc()
+        PIPELINE_REQUESTS.labels(status="ok", llm_provider=self._provider()).inc()
         PIPELINE_LATENCY.observe(total)
         return TurnResult(
             transcript=transcript,
-            intent=intent,
-            reply_text=reply,
+            llm=llm_result,
+            reply_text=llm_result.text,
             speech=speech,
             stt_latency_s=stt_s,
-            nlu_latency_s=nlu_s,
+            llm_latency_s=llm_s,
             tts_latency_s=tts_s,
             total_latency_s=total,
-            timings={"stt": stt_s, "nlu": nlu_s, "tts": tts_s, "total": total},
+            system_prompt=self._system_prompt_for(system_prompt),
+            history_turns=len(history) if history else 0,
+            timings={"stt": stt_s, "llm": llm_s, "tts": tts_s, "total": total},
         )

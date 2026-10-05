@@ -1,16 +1,15 @@
-"""STT -> NLU -> TTS pipeline."""
+"""STT -> LLM -> TTS pipeline."""
 
 from __future__ import annotations
 
 from app.config import Settings, configure_hf_home
-from app.nlu import build_nlu
+from app.llm import build_llm
 from app.pipeline.orchestrator import (
     EventKind,
     PipelineEvent,
     TurnResult,
     VoicePipeline,
 )
-from app.pipeline.responder import respond
 from app.stt import build_stt
 from app.tts import build_tts
 
@@ -20,7 +19,6 @@ __all__ = [
     "TurnResult",
     "VoicePipeline",
     "build_pipeline",
-    "respond",
 ]
 
 
@@ -30,8 +28,10 @@ def build_pipeline(settings: Settings) -> VoicePipeline:
     configure_hf_home(settings)
     return VoicePipeline(
         build_stt(settings),
-        build_nlu(settings),
+        build_llm(settings),
         build_tts(settings),
         sample_rate=settings.sample_rate_hz,
         chunk_samples=settings.tts_chunk_samples,
+        system_prompt=settings.llm_system_prompt,
+        fallback_reply=settings.llm_fallback_reply,
     )
