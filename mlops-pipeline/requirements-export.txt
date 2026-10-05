@@ -7,7 +7,7 @@
 #   python -m pip install -r ai-engine/requirements.txt -r mlops-pipeline/requirements-export.txt
 #
 # `torch`, `transformers` and `safetensors` come from ai-engine/requirements.txt
-# (Laya and the HF fallback need them); only the export-specific extras are here.
+# (the MiniLM encoder needs them); only the export-specific extras are here.
 
 # torch.onnx.export (legacy TorchScript path) needs `onnx`; the newer
 # torch.export-based path needs `onnxscript`. Both are pinned so an export run

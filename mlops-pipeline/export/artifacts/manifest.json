@@ -4,7 +4,7 @@
   "artifacts": [
     {
       "model": "minilm_nlu",
-      "stage": "nlu_fallback",
+      "stage": "embedding_primary",
       "source": "sentence-transformers/all-MiniLM-L6-v2",
       "status": "exported",
       "path": "mlops-pipeline/export/artifacts/minilm_nlu.onnx",
@@ -49,50 +49,8 @@
         }
       ],
       "triton_backend": "onnxruntime",
-      "notes": "Mean-pool + L2-norm stay outside the graph (match ai-engine HFIntentNLU).",
-      "seconds": 0.72
-    },
-    {
-      "model": "laya_encoder",
-      "stage": "nlu_primary",
-      "source": "convaiinnovations/laya",
-      "status": "exported",
-      "path": "mlops-pipeline/export/artifacts/laya_encoder.onnx",
-      "size_bytes": 1579833655,
-      "sha256": "0ee3fe4e584323a753bb2df7612f03982b23fd92fe91463770f0c3ab38ed33ff",
-      "opset": 17,
-      "inputs": [
-        {
-          "name": "input_ids",
-          "type": "tensor(int64)",
-          "shape": [
-            "batch",
-            "sequence"
-          ]
-        },
-        {
-          "name": "attention_mask",
-          "type": "tensor(int64)",
-          "shape": [
-            "batch",
-            "sequence"
-          ]
-        }
-      ],
-      "outputs": [
-        {
-          "name": "last_hidden_state",
-          "type": "tensor(float)",
-          "shape": [
-            "batch",
-            "sequence",
-            "1024"
-          ]
-        }
-      ],
-      "triton_backend": "onnxruntime",
-      "notes": "Encoder body only (ModernBertModel); Laya's act_head/scorer stay in the client. Tokenizer/temperature artefacts must be shipped alongside.",
-      "seconds": 34.61
+      "notes": "Mean-pool + L2-norm stay outside the graph (match app/knowledge/embeddings.EmbeddingModel).",
+      "seconds": 0.69
     },
     {
       "model": "piper_tts",

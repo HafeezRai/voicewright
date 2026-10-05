@@ -1,8 +1,8 @@
 """Stage real model artifacts into the Triton model repository's version dirs.
 
 A Triton repository needs each model's weights under a numeric version
-directory (``<model>/1/``). Those weights are large (the Laya encoder graph
-alone is ~1.6 GiB) and are gitignored, so they are *staged*, not committed:
+directory (``<model>/1/``). Those weights are binaries (the MiniLM graph alone
+is ~90 MB) and are gitignored, so they are *staged*, not committed:
 ``config.pbtxt`` files live in git; the binaries do not.
 
 Run the exporter first, then this::
@@ -44,10 +44,6 @@ def _ensure_clean_version_dir(model: str) -> Path:
 
 def stage_minilm(check: bool = False) -> list[Path]:
     return _stage_onnx("minilm_nlu", DEFAULT_ARTIFACTS_DIR / "minilm_nlu.onnx", check)
-
-
-def stage_laya(check: bool = False) -> list[Path]:
-    return _stage_onnx("laya_encoder", DEFAULT_ARTIFACTS_DIR / "laya_encoder.onnx", check)
 
 
 def _stage_onnx(model: str, src: Path, check: bool) -> list[Path]:
@@ -98,7 +94,6 @@ def stage_whisper(check: bool = False) -> list[Path]:
 
 STAGERS = {
     "minilm_nlu": stage_minilm,
-    "laya_encoder": stage_laya,
     "piper_tts": stage_piper,
     "whisper_ct2": stage_whisper,
 }
@@ -107,7 +102,6 @@ STAGERS = {
 #: Files each model's version dir must contain for Triton to load it.
 REQUIRED = {
     "minilm_nlu": ["1/model.onnx"],
-    "laya_encoder": ["1/model.onnx"],
     "piper_tts": ["1/en_US-amy-low.onnx", "1/tokens.txt"],
     "whisper_ct2": ["1/model/model.bin"],
     "tts_frontend": ["1/model.py"],

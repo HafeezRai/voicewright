@@ -23,11 +23,11 @@ here**, and no claim below says otherwise.
 
 | Artifact | Status | Evidence |
 |---|---|---|
-| `export/export_onnx.py` — export MiniLM & Laya, stage Piper/Whisper | **EXECUTED** | All four models processed; `manifest.json` written with real sha256 + I/O signatures |
-| Numerical parity (MiniLM, Laya) | **EXECUTED** | PyTorch vs ONNX Runtime on real inputs; max-abs-diff 1.79e-05 / 2.16e-04 (see below) |
+| `export/export_onnx.py` — export MiniLM, stage Piper/Whisper | **EXECUTED** | All three models processed; `manifest.json` written with real sha256 + I/O signatures |
+| Numerical parity (MiniLM) | **EXECUTED** | PyTorch vs ONNX Runtime on real inputs; max-abs-diff 1.79e-05 (see below) |
 | Piper ONNX determinism check | **EXECUTED** | Raw ONNX Runtime forward pass; determinism diff 0.0 |
 | STT CTranslate2 load + transcription | **EXECUTED** | `faster-whisper` transcribes `speech_16k.wav` → "percent global wealth." |
-| `triton_repo/model_repository/*/config.pbtxt` | **STATICALLY VALIDATED** | Parsed against the real `triton.ModelConfig` protobuf + consistency checks (5/5 valid) |
+| `triton_repo/model_repository/*/config.pbtxt` | **STATICALLY VALIDATED** | Parsed against the real `triton.ModelConfig` protobuf + consistency checks (4/4 valid) |
 | `triton_repo/docker-compose.triton.yml` | **STATICALLY VALIDATED** | `docker compose config` exits 0 |
 | **Triton Inference Server itself** | **NEVER RUN** | No NVIDIA GPU on this host; `nvcr.io/nvidia/tritonserver` cannot start here |
 | `tts_frontend/1/model.py` (python backend) | **NOT EXECUTED** | Reference implementation; needs an espeak-ng phonemiser that is not installed here |
@@ -77,7 +77,6 @@ checks the invariants Triton enforces (name == directory name, backend is real,
 
 ```
 [ok ] minilm_nlu     exported      torch.onnx.export, opset 17, 90.4 MB
-[ok ] laya_encoder   exported      torch.onnx.export, opset 17, 1.58 GB
 [ok ] piper_tts      already-onnx  authored as ONNX by the Piper pipeline
 [ok ] whisper_ct2    native-ct2    CTranslate2 directory; no export by design
 ```
@@ -88,13 +87,12 @@ Numerical parity — **real numbers from this run**:
 |---|---|---|---|
 | `minilm_nlu` | PyTorch vs ORT, `last_hidden_state` | **1.79e-05** | 1e-3 |
 | `minilm_nlu` | PyTorch vs ORT, mean-pooled embedding | **3.28e-07** | 1e-3 |
-| `laya_encoder` | PyTorch vs ORT, `last_hidden_state` | **2.16e-04** | 1e-3 |
 | `piper_tts` | ORT determinism @ `noise_scale=0` | **0.0** | exact |
 
-`minilm_nlu` and `laya_encoder` were re-checked at three different sequence
-lengths (16 / 7 / 3 and 16 / 11 / 3) to prove the exported dynamic axes are real
-rather than frozen at the trace length. The 1e-3 tolerance is three orders below
-the activation scale (~1.0) and far inside the margin between intent centroids.
+`minilm_nlu` was re-checked at three different sequence lengths (16 / 7 / 3) to
+prove the exported dynamic axes are real rather than frozen at the trace length.
+The 1e-3 tolerance is three orders below the activation scale (~1.0) and far
+inside any difference that would change a retrieval result.
 
 ### A real bug the export caught
 
@@ -131,7 +129,7 @@ hide behind a skip again.
 # 0. one-time: export tooling into the ai-engine venv
 ai-engine/.venv/bin/pip install -r mlops-pipeline/requirements-export.txt
 
-# 1. export / stage every model  (Laya is ~1.6 GB and takes ~35 s)
+# 1. export / stage every model
 ai-engine/.venv/bin/python mlops-pipeline/export/export_onnx.py --model all
 ai-engine/.venv/bin/python mlops-pipeline/export/export_onnx.py --model minilm   # fast path
 
@@ -174,13 +172,8 @@ cannot be checked here.
 * **No accuracy evaluation set.** There is no labelled corpus in this project, so
   the promotion gates measure *numerical equivalence* and *regression*, not model
   quality. Stated rather than invented.
-* **Laya confidence is uncalibrated** (see `ai-engine/README.md`); the export does
-  not change that.
 * **`tts_frontend/1/model.py` is unverified code.** It is a reference
   implementation of the espeak-ng phonemisation step and has not been executed.
-* **The Laya encoder graph is 1.58 GB fp32.** No quantisation is applied here
-  (fp16/int8 would shrink it substantially, at an accuracy cost this repo has no
-  way to measure). Left as an explicit follow-up.
 * **`piper_tts` batching is off** (`max_batch_size: 0`) because the `scales` input
   has no batch dimension — see that config's comment. Server-side batching for
   TTS would need a client/front-end change, not a config tweak.

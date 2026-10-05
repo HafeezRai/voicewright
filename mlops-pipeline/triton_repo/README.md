@@ -5,15 +5,14 @@ The Triton Inference Server model repository.
 ```
 model_repository/
 ├── whisper_ct2/     ctranslate2   STT  — no ONNX export (see below)
-├── laya_encoder/    onnxruntime   NLU  — ModernBERT encoder, exported
-├── minilm_nlu/      onnxruntime   NLU  — fallback encoder, exported
+├── minilm_nlu/      onnxruntime   embeddings — MiniLM encoder, exported
 ├── piper_tts/       onnxruntime   TTS  — already ONNX
 └── tts_frontend/    python        TTS  — text → phoneme ids (reference impl)
 ```
 
 Each `<model>/` holds a committed `config.pbtxt`; the weights live in
 `<model>/1/` and are **gitignored** — they are produced by
-`mlops-pipeline/export/populate_triton_repo.py` (the Laya graph alone is 1.58 GB).
+`mlops-pipeline/export/populate_triton_repo.py`.
 
 ## ⚠️ Static validation only
 
@@ -22,8 +21,8 @@ reports only the `runc` runtime, no `nvidia`). What *has* been done:
 
 ```bash
 python mlops-pipeline/triton_repo/validate_configs.py
-#   OK  laya_encoder / minilm_nlu / piper_tts / tts_frontend / whisper_ct2
-#   5/5 configs valid
+#   OK  minilm_nlu / piper_tts / tts_frontend / whisper_ct2
+#   4/4 configs valid
 ```
 
 `validate_configs.py` parses each file with the genuine

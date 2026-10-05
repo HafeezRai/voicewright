@@ -2,13 +2,12 @@
 
 This is the bridge between the checkpoints Phase 3 selected and the artifacts a
 Triton inference server can actually load. It is deliberately *explicit* about
-which stages get an ONNX graph and which do not, because two of the four models
+which stages get an ONNX graph and which do not, because two of the three models
 are already in their serving format:
 
     stage                source                      onnx?   triton backend
     -------------------  --------------------------  ------  -----------------
-    NLU  (fallback)      all-MiniLM-L6-v2 (torch)    EXPORT  onnxruntime
-    NLU  (primary)       Laya ModernBERT (torch)     EXPORT  onnxruntime
+    embeddings           all-MiniLM-L6-v2 (torch)    EXPORT  onnxruntime
     TTS                  Piper VITS (already .onnx)  none    onnxruntime
     STT                  faster-whisper (CT2 dir)    none    ctranslate2
 
@@ -35,7 +34,7 @@ directory named ``triton`` -- it is ``triton_repo/`` -- so it cannot shadow the
 real PyTorch ``triton`` package that ``import torch`` needs)::
 
     python mlops-pipeline/export/export_onnx.py --model all
-    python mlops-pipeline/export/export_onnx.py --model minilm laya
+    python mlops-pipeline/export/export_onnx.py --model minilm
 """
 
 from __future__ import annotations
@@ -62,7 +61,6 @@ DEFAULT_ARTIFACTS_DIR = Path(__file__).resolve().parent / "artifacts"
 
 #: HuggingFace repo ids, matching ai-engine/app/config.py defaults.
 MINILM_REPO = "sentence-transformers/all-MiniLM-L6-v2"
-LAYA_REPO = "convaiinnovations/laya"
 WHISPER_CT2_REPO = "Systran/faster-whisper-base.en"
 PIPER_VOICE_DIRNAME = "vits-piper-en_US-amy-low"
 
@@ -181,14 +179,14 @@ def export_minilm(
     models_root: Path = DEFAULT_MODELS_ROOT,
     out_dir: Path = DEFAULT_ARTIFACTS_DIR,
 ) -> Artifact:
-    """Export the HuggingFace NLU fallback (all-MiniLM-L6-v2) to ONNX.
+    """Export the MiniLM embedding encoder (all-MiniLM-L6-v2) to ONNX.
 
     A plain ``BertModel`` encoder, so the graph is ``input_ids`` /
     ``attention_mask`` / ``token_type_ids`` -> ``last_hidden_state`` with
-    dynamic batch and sequence axes. The ai-engine NLU embeds by mean-pooling
-    ``last_hidden_state`` and L2-normalising, which is arithmetic done outside
-    the graph in both the PyTorch and Triton paths -- so the graph boundary is
-    the hidden state, not the embedding.
+    dynamic batch and sequence axes. The ai-engine knowledge encoder
+    mean-pools ``last_hidden_state`` and L2-normalises, which is arithmetic
+    done outside the graph in both the PyTorch and Triton paths -- so the graph
+    boundary is the hidden state, not the embedding.
 
     ``AutoModel`` for a BERT returns *two* tensors (``last_hidden_state`` and the
     unused ``pooler_output``). The model is wrapped so the graph exposes only the
@@ -251,7 +249,7 @@ def export_minilm(
     inputs, outputs = _ort_signature(out_path)
     return Artifact(
         model="minilm_nlu",
-        stage="nlu_fallback",
+        stage="embedding_primary",
         source=MINILM_REPO,
         status="exported",
         path=_rel(out_path),
@@ -261,104 +259,7 @@ def export_minilm(
         inputs=inputs,
         outputs=outputs,
         triton_backend="onnxruntime",
-        notes="Mean-pool + L2-norm stay outside the graph (match ai-engine HFIntentNLU).",
-        seconds=round(time.time() - t0, 2),
-    )
-
-
-def _load_laya_encoder(models_root: Path):
-    """Load the Laya ModernBERT encoder as a plain ``ModernBertModel``.
-
-    Laya's checkpoint stores one ``model.safetensors`` for the whole RL agent
-    (policy head + encoder are in the same file) with the encoder's weights
-    namespaced ``encoder.*``, and the encoder's *config* in ``encoder/config.json``.
-    The encoder is what a Triton ONNX backend serves, so we rebuild it from the
-    config and load only the ``encoder.*`` tensors.
-    """
-    import torch  # noqa: F401 - ensures torch is importable before safetensors load
-    from safetensors.torch import load_file
-    from transformers import AutoConfig, AutoTokenizer, ModernBertModel
-
-    snap = _snapshot(models_root, LAYA_REPO)
-    config = AutoConfig.from_pretrained(str(snap / "encoder"), local_files_only=True)
-    model = ModernBertModel(config).eval()
-    state = load_file(str(snap / "model.safetensors"))
-    encoder_state = {k[len("encoder.") :]: v for k, v in state.items() if k.startswith("encoder.")}
-    missing, unexpected = model.load_state_dict(encoder_state, strict=False)
-    if missing or unexpected:
-        raise RuntimeError(
-            f"Laya encoder state_dict mismatch: {len(missing)} missing, "
-            f"{len(unexpected)} unexpected"
-        )
-    tokenizer = AutoTokenizer.from_pretrained(str(snap / "tokenizer"), local_files_only=True)
-    return model, tokenizer
-
-
-def export_laya_encoder(
-    models_root: Path = DEFAULT_MODELS_ROOT,
-    out_dir: Path = DEFAULT_ARTIFACTS_DIR,
-) -> Artifact:
-    """Export Laya's ModernBERT-large encoder to ONNX.
-
-    Phase 3's README notes that Laya bundles an ONNX *runtime* but not its
-    ``export_onnx.py``, so this is an independent ``torch.onnx.export`` of the
-    encoder body. Only the encoder is exported: the RL policy head (``act_head``
-    / ``scorer``, ~36 tensors) is small and cheap to keep in the client, and the
-    expensive part -- the 28-layer, 1024-hidden transformer whose embeddings the
-    policy head consumes -- is what benefits from GPU batching in Triton.
-
-    The 1.6 GiB fp32 graph is written to the gitignored ``artifacts/`` dir; only
-    its hash and signature are committed (see ``manifest.json``).
-    """
-    import torch
-
-    pin_hf_offline(models_root)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    snap = _snapshot(models_root, LAYA_REPO)
-    out_path = out_dir / "laya_encoder.onnx"
-
-    t0 = time.time()
-    model, tokenizer = _load_laya_encoder(models_root)
-    batch = tokenizer(
-        ["book a meeting with sales tomorrow", "hi"],
-        padding="max_length",
-        truncation=True,
-        max_length=_TRACE_SEQ_LEN,
-        return_tensors="pt",
-    )
-
-    torch.onnx.export(
-        model,
-        (batch["input_ids"], batch["attention_mask"]),
-        str(out_path),
-        input_names=["input_ids", "attention_mask"],
-        output_names=["last_hidden_state"],
-        dynamic_axes={
-            "input_ids": {0: "batch", 1: "sequence"},
-            "attention_mask": {0: "batch", 1: "sequence"},
-            "last_hidden_state": {0: "batch", 1: "sequence"},
-        },
-        opset_version=ONNX_OPSET,
-        do_constant_folding=True,
-        dynamo=False,
-    )
-    inputs, outputs = _ort_signature(out_path)
-    return Artifact(
-        model="laya_encoder",
-        stage="nlu_primary",
-        source=LAYA_REPO,
-        status="exported",
-        path=_rel(out_path),
-        size_bytes=out_path.stat().st_size,
-        sha256=_sha256(out_path),
-        opset=ONNX_OPSET,
-        inputs=inputs,
-        outputs=outputs,
-        triton_backend="onnxruntime",
-        notes=(
-            "Encoder body only (ModernBertModel); Laya's act_head/scorer stay in "
-            "the client. Tokenizer/temperature artefacts must be shipped alongside."
-        ),
+        notes="Mean-pool + L2-norm stay outside the graph (match app/knowledge/embeddings.EmbeddingModel).",
         seconds=round(time.time() - t0, 2),
     )
 
@@ -440,7 +341,6 @@ def describe_whisper_ct2(
 
 EXPORTERS = {
     "minilm": export_minilm,
-    "laya": export_laya_encoder,
     "piper": stage_piper,
     "whisper": describe_whisper_ct2,
 }

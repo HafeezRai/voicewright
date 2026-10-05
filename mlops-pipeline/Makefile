@@ -23,7 +23,7 @@ help:
 export: ## Export/stage every model (ONNX where applicable, native otherwise)
 	cd $(REPO) && $(PYTHON) mlops-pipeline/export/export_onnx.py --model all
 
-export-minilm: ## Export just MiniLM (fast; skips the 1.6 GiB Laya graph)
+export-minilm: ## Export just MiniLM (the embedding encoder; the fast path)
 	cd $(REPO) && $(PYTHON) mlops-pipeline/export/export_onnx.py --model minilm
 
 parity: ## Run the numerical-parity tests and print the real max-abs-diff numbers

@@ -21,21 +21,8 @@ stages:
       to ONNX would discard the quantisation; the CTranslate2 Triton backend
       loads the directory as-is.
 
-  nlu_primary:
-    ai_engine_setting: AI_ENGINE_NLU_MODEL
-    ai_engine_value: convaiinnovations/laya
-    source_repo: convaiinnovations/laya
-    artifact_format: onnx
-    triton_model: laya_encoder
-    triton_backend: onnxruntime
-    export: torch.onnx.export (encoder body only)
-    parity_tolerance: 1.0e-3
-    rationale: >-
-      Laya ships an ONNX runtime but not its export script, so the ModernBERT
-      encoder is exported independently. The RL policy head stays client-side.
-
-  nlu_fallback:
-    ai_engine_setting: AI_ENGINE_NLU_HF_MODEL
+  embedding_primary:
+    ai_engine_setting: AI_ENGINE_EMBEDDING_MODEL
     ai_engine_value: sentence-transformers/all-MiniLM-L6-v2
     source_repo: sentence-transformers/all-MiniLM-L6-v2
     artifact_format: onnx
@@ -43,6 +30,10 @@ stages:
     triton_backend: onnxruntime
     export: torch.onnx.export
     parity_tolerance: 1.0e-3
+    rationale: >-
+      The MiniLM encoder serves a future knowledge-base (RAG) stage, not the
+      reply path: it is the embedding primitive that outlived the retired intent
+      model. Exported encoder-only (the unused BERT pooler output is dropped).
 
   tts:
     ai_engine_setting: AI_ENGINE_TTS_MODEL

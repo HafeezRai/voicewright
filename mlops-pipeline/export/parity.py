@@ -8,12 +8,9 @@ maximum absolute difference.
 What "parity" means per model, honestly stated:
 
 * **minilm_nlu** -- PyTorch ``AutoModel`` vs ONNX Runtime, on both the raw
-  ``last_hidden_state`` and the mean-pooled, L2-normalised embedding the NLU
-  fallback actually classifies on. The latter is the number that matters: it is
-  the vector the intent decision is made from.
-* **laya_encoder** -- PyTorch ``ModernBertModel`` vs ONNX Runtime
-  ``last_hidden_state``. Exported at one trace length and re-checked at several
-  others to prove the dynamic axes are real.
+  ``last_hidden_state`` and the mean-pooled, L2-normalised embedding the
+  knowledge-base encoder actually produces. The latter is the number that
+  matters: it is the vector retrieval compares against.
 * **piper_tts** -- there is no PyTorch source (the voice is authored as ONNX), so
   a cross-framework diff is not defined. Instead this checks the graph runs under
   raw ONNX Runtime, is finite, and is *deterministic* at ``noise_scale=0`` --
@@ -21,9 +18,8 @@ What "parity" means per model, honestly stated:
 
 Tolerances: fp32 ONNX Runtime uses different kernel fusion and accumulation order
 than PyTorch, so exact equality is not expected. ``abs_tol`` is set at 1e-3 --
-three orders of magnitude below the ~1.0 magnitude of the activations, and well
-inside the margin between any two intent centroids -- which is the operationally
-meaningful bar for a classifier feeding a decision.
+three orders of magnitude below the ~1.0 magnitude of the activations, which is
+comfortably inside any difference that would change a retrieval result.
 """
 
 from __future__ import annotations
@@ -51,7 +47,7 @@ def _ort_session(path: Path):
 
 
 def _pool(hidden: np.ndarray, mask: np.ndarray) -> np.ndarray:
-    """Mean-pool then L2-normalise -- mirrors app/nlu/hf_engine.HFIntentNLU._embed."""
+    """Mean-pool then L2-normalise -- mirrors app/knowledge/embeddings.EmbeddingModel."""
     m = mask[..., None].astype(np.float32)
     pooled = (hidden * m).sum(1) / np.clip(m.sum(1), 1e-9, None)
     norm = np.linalg.norm(pooled, axis=1, keepdims=True)
@@ -64,7 +60,7 @@ def parity_minilm(
     *,
     seq_lens: tuple[int, ...] = (16, 7, 3),
 ) -> dict[str, Any]:
-    """PyTorch vs ONNX Runtime parity for the MiniLM NLU fallback."""
+    """PyTorch vs ONNX Runtime parity for the MiniLM embedding encoder."""
     import torch
     from transformers import AutoModel, AutoTokenizer
 
@@ -113,57 +109,6 @@ def parity_minilm(
         "embedding_max_abs_diff": embed_diff,
         "abs_tol": ABS_TOL,
         "passed": hidden_diff <= ABS_TOL and embed_diff <= ABS_TOL,
-        "per_seq_len": per_len,
-    }
-
-
-def parity_laya(
-    onnx_path: Path,
-    models_root: Path,
-    *,
-    seq_lens: tuple[int, ...] = (16, 11, 3),
-) -> dict[str, Any]:
-    """PyTorch vs ONNX Runtime parity for the Laya ModernBERT encoder."""
-    import torch
-
-    from export_onnx import _load_laya_encoder, pin_hf_offline
-
-    pin_hf_offline(models_root)
-    model, tokenizer = _load_laya_encoder(models_root)
-    session = _ort_session(onnx_path)
-
-    max_diff = 0.0
-    per_len: list[dict[str, Any]] = []
-    for seq_len in seq_lens:
-        batch = tokenizer(
-            _SENTENCES,
-            padding="max_length",
-            truncation=True,
-            max_length=seq_len,
-            return_tensors="pt",
-        )
-        with torch.no_grad():
-            ref = model(
-                input_ids=batch["input_ids"], attention_mask=batch["attention_mask"]
-            ).last_hidden_state.numpy()
-        out = session.run(
-            None,
-            {
-                "input_ids": batch["input_ids"].numpy(),
-                "attention_mask": batch["attention_mask"].numpy(),
-            },
-        )[0]
-        d = float(np.max(np.abs(out - ref)))
-        max_diff = max(max_diff, d)
-        per_len.append({"seq_len": seq_len, "shape": list(out.shape),
-                        "hidden_max_abs_diff": d})
-
-    return {
-        "model": "laya_encoder",
-        "framework": "torch -> onnxruntime",
-        "hidden_max_abs_diff": max_diff,
-        "abs_tol": ABS_TOL,
-        "passed": max_diff <= ABS_TOL,
         "per_seq_len": per_len,
     }
 

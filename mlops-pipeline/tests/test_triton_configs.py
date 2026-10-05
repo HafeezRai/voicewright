@@ -38,7 +38,6 @@ ModelConfig = validate_configs.model_config_pb2.ModelConfig
 
 EXPECTED_MODELS = {
     "minilm_nlu",
-    "laya_encoder",
     "piper_tts",
     "whisper_ct2",
     "tts_frontend",
@@ -69,7 +68,7 @@ def test_stt_uses_ctranslate2_not_onnx():
 
 def test_onnx_models_declare_dynamic_batching_or_explain_why_not():
     """onnxruntime models enable batching, except piper (documented exception)."""
-    for name in ("minilm_nlu", "laya_encoder"):
+    for name in ("minilm_nlu",):
         config = _config(name)
         assert config.max_batch_size > 0
         assert config.dynamic_batching.preferred_batch_size, f"{name} has no preferred_batch_size"
