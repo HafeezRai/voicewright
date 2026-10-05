@@ -49,6 +49,44 @@ NLU_LATENCY = Histogram(
     buckets=_LATENCY_BUCKETS,
 )
 
+# --- LLM ---------------------------------------------------------------------
+#: First-token latency on a *cold* local model is dominated by loading several
+#: gigabytes of weights, which the shared buckets (topping out at 10s) would
+#: report as +Inf -- hiding the very thing the series exists to separate.
+_LLM_FIRST_TOKEN_BUCKETS = (0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0, 120.0)
+
+LLM_REQUESTS = Counter(
+    "cloudpso_ai_llm_requests_total",
+    "LLM generation requests, labelled by provider and outcome.",
+    ["provider", "status"],
+)
+LLM_LATENCY = Histogram(
+    "cloudpso_ai_llm_latency_seconds",
+    "Wall-clock time to generate one reply.",
+    ["provider"],
+    buckets=_LATENCY_BUCKETS,
+)
+#: The single most valuable new series: it separates "the model is loading"
+#: (first token late, then fast) from "the model is slow" (first token late AND
+#: total late). Its own coarse buckets, for the reason above.
+LLM_FIRST_TOKEN = Histogram(
+    "cloudpso_ai_llm_first_token_seconds",
+    "Time from request to the first streamed token, labelled by provider.",
+    ["provider"],
+    buckets=_LLM_FIRST_TOKEN_BUCKETS,
+)
+LLM_TOKENS = Counter(
+    "cloudpso_ai_llm_tokens_total",
+    "Tokens reported by the provider, labelled by provider and kind (prompt|completion).",
+    ["provider", "kind"],
+)
+#: Emitted when barge-in stops generation before the reply was finished.
+LLM_CANCELLED = Counter(
+    "cloudpso_ai_llm_cancelled_total",
+    "Generations abandoned early by a barge-in cancel.",
+    ["provider"],
+)
+
 # --- TTS ---------------------------------------------------------------------
 TTS_REQUESTS = Counter(
     "cloudpso_ai_tts_requests_total",

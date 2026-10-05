@@ -19,10 +19,12 @@ from __future__ import annotations
 import os
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from app.llm.prompts import DEFAULT_SYSTEM_PROMPT
 
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 Environment = Literal["development", "staging", "production"]
@@ -34,6 +36,11 @@ TTSBackend = Literal["sherpa"]
 # `auto` prefers Laya and falls back to the HuggingFace classifier if Laya is
 # unavailable (not installed, checkpoint unreachable, or failed to load).
 NLUBackend = Literal["auto", "laya", "hf"]
+#: There is exactly one shipped LLM implementation: every provider we support
+#: (Ollama, DeepSeek, vLLM, LM Studio, OpenAI) speaks the same OpenAI-compatible
+#: ``/chat/completions`` protocol, so the provider is a *base URL and model*
+#: choice, not a code path.
+LLMBackend = Literal["openai_compat"]
 
 #: Directory (relative to the ai-engine package root) used when the configured
 #: model cache is absent or not writable -- the common case on a dev laptop,
@@ -117,6 +124,72 @@ class Settings(BaseSettings):
         default="sentence-transformers/all-MiniLM-L6-v2", alias="AI_ENGINE_NLU_HF_MODEL"
     )
 
+    # --- knowledge (embeddings) ---------------------------------------------
+    #: The MiniLM encoder that outlives the intent model -- it becomes the
+    #: retrieval encoder for the knowledge base. Same weights as ``nlu_hf_model``
+    #: today; ``nlu_hf_model`` goes away with the NLU package.
+    embedding_model: str = Field(
+        default="sentence-transformers/all-MiniLM-L6-v2", alias="AI_ENGINE_EMBEDDING_MODEL"
+    )
+
+    # --- LLM (the "think" stage) --------------------------------------------
+    #: Generation replaces intent classification. One OpenAI-compatible client
+    #: covers every provider; ``llm_provider`` only selects a default base URL.
+    llm_backend: LLMBackend = Field(default="openai_compat", alias="AI_ENGINE_LLM_BACKEND")
+    #: Free-form so a new OpenAI-compatible host needs no code change. Known
+    #: names (``ollama``, ``deepseek``, ``openai``) get a default base URL.
+    llm_provider: str = Field(default="ollama", alias="AI_ENGINE_LLM_PROVIDER")
+    #: Blank -> derived from ``llm_provider`` (see ``app.llm.factory``).
+    llm_base_url: str = Field(default="", alias="AI_ENGINE_LLM_BASE_URL")
+    #: ``llama3:8b`` verbatim. The bare tag ``llama3`` does not exist in this
+    #: environment and 404s on the very first request -- verified against
+    #: Ollama's ``/api/tags``.
+    llm_model: str = Field(default="llama3:8b", alias="AI_ENGINE_LLM_MODEL")
+    #: Sent as a bearer token only when set; blank for a local Ollama.
+    llm_api_key: SecretStr | None = Field(default=None, alias="AI_ENGINE_LLM_API_KEY")
+    llm_temperature: float = Field(
+        default=0.4, ge=0.0, le=2.0, alias="AI_ENGINE_LLM_TEMPERATURE"
+    )
+    #: The cheapest latency lever there is: a demo reply is one or two sentences.
+    llm_max_tokens: int = Field(default=160, ge=1, le=4096, alias="AI_ENGINE_LLM_MAX_TOKENS")
+    #: Per-chunk read timeout under streaming, so a long generation is fine as
+    #: long as tokens keep arriving.
+    llm_timeout_s: float = Field(default=30.0, gt=0.0, alias="AI_ENGINE_LLM_TIMEOUT_S")
+    #: Short on purpose: a dead endpoint must become a clean 503, not a hang.
+    llm_connect_timeout_s: float = Field(
+        default=2.0, gt=0.0, alias="AI_ENGINE_LLM_CONNECT_TIMEOUT_S"
+    )
+    #: 0 = never retry. A retry doubles the latency of a turn the caller has
+    #: already abandoned. Connection failures only; read timeouts are not retried.
+    llm_max_retries: int = Field(default=0, ge=0, le=5, alias="AI_ENGINE_LLM_MAX_RETRIES")
+    #: Stream the transport even for a whole-reply call, so first-token latency
+    #: is measurable (and a cold model load is distinguishable from a slow one).
+    llm_stream: bool = Field(default=True, alias="AI_ENGINE_LLM_STREAM")
+    #: The agent's persona. Overridable per request via ``POST /pipeline``.
+    llm_system_prompt: str = Field(
+        default=DEFAULT_SYSTEM_PROMPT, alias="AI_ENGINE_LLM_SYSTEM_PROMPT"
+    )
+    #: How many prior user/assistant exchanges to replay. 0 disables history.
+    llm_history_turns: int = Field(
+        default=6, ge=0, le=50, alias="AI_ENGINE_LLM_HISTORY_TURNS"
+    )
+    #: Warm the model in a background thread at startup. The first turn on a
+    #: cold Ollama pays a multi-GB load; this moves that cost off the caller.
+    llm_warmup: bool = Field(default=True, alias="AI_ENGINE_LLM_WARMUP")
+    #: Extra top-level fields merged into the request body. Ollama's
+    #: ``keep_alive`` keeps the model resident between turns.
+    llm_extra_body: dict[str, Any] = Field(
+        default_factory=lambda: {"keep_alive": "30m"}, alias="AI_ENGINE_LLM_EXTRA_BODY"
+    )
+    #: Spoken when the provider is unreachable. Empty (the default) fails loudly
+    #: with a 503; setting it keeps a demo audible when the model is down.
+    llm_fallback_reply: str = Field(default="", alias="AI_ENGINE_LLM_FALLBACK_REPLY")
+    #: Reasoning models stream chain-of-thought that the TTS would read aloud.
+    #: Off by default; see ``app.llm.openai_compat.REASONING_MODEL_MARKERS``.
+    llm_allow_reasoning_models: bool = Field(
+        default=False, alias="AI_ENGINE_LLM_ALLOW_REASONING_MODELS"
+    )
+
     # --- TTS --------------------------------------------------------------
     tts_backend: TTSBackend = Field(default="sherpa", alias="AI_ENGINE_TTS_BACKEND")
     #: Model directory name under ``<models_root>/tts`` (a Piper/VITS voice).
@@ -150,10 +223,16 @@ class Settings(BaseSettings):
             return _auto_device() if normalised == "auto" else normalised
         return value
 
-    @field_validator("nlu_backend", "stt_backend", "tts_backend", mode="before")
+    @field_validator("nlu_backend", "stt_backend", "tts_backend", "llm_backend", mode="before")
     @classmethod
     def _normalise_choice(cls, value: object) -> object:
         return value.lower() if isinstance(value, str) else value
+
+    @field_validator("llm_provider", mode="before")
+    @classmethod
+    def _normalise_provider(cls, value: object) -> object:
+        """Lower-case the provider name: it keys the default base-URL table."""
+        return value.strip().lower() if isinstance(value, str) else value
 
     @property
     def is_production(self) -> bool:

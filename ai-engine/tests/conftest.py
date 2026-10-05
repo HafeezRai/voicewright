@@ -21,6 +21,7 @@ rather than failing -- a bare checkout stays green.
 from __future__ import annotations
 
 import os
+import time
 from pathlib import Path
 
 import pytest
@@ -30,7 +31,9 @@ os.environ.setdefault("AI_ENGINE_NLU_BACKEND", "hf")
 os.environ.setdefault("AI_ENGINE_GRPC_ENABLED", "false")
 os.environ.setdefault("AI_ENGINE_LOG_LEVEL", "WARNING")
 
+from app.cancellation import CancelToken
 from app.config import configure_hf_home, get_settings
+from app.llm.base import ChatMessage, LLMEngine, LLMResult, LLMUsage
 from app.nlu import HFIntentNLU
 from app.pipeline import VoicePipeline
 from app.stt import FasterWhisperSTT
@@ -43,6 +46,93 @@ REPO_ROOT = AI_ENGINE_DIR.parent
 SPEECH_WAV = REPO_ROOT / "backend-core" / "tests" / "data" / "speech_16k.wav"
 
 FETCH_HINT = "run `ai-engine/scripts/fetch_models.sh` to download model weights"
+
+#: Deterministic stand-in for the LLM stage. Long enough that the TTS produces
+#: several chunks (so barge-in has something to interrupt), and stable so tests
+#: can assert on structure without a model.
+FAKE_REPLY = "This is a deterministic test reply from the fake language model."
+
+
+class FakeLLM(LLMEngine):
+    """A scripted LLM engine: no network, no model, fully deterministic.
+
+    It emits *real* deltas through the same ``stream`` contract the shipped
+    client implements, honours ``cancel`` between them, and can be told to fail,
+    so the whole pipeline suite runs with no Ollama and no cold-start wait --
+    while still exercising the incremental path rather than a stub that returns
+    one string.
+
+    Every call records the exact message list it received, which is how tests
+    assert that a system prompt actually reached the model.
+    """
+
+    name = "fake"
+
+    def __init__(
+        self,
+        reply: str = FAKE_REPLY,
+        *,
+        provider: str = "fake",
+        model: str = "fake-1",
+        delta_delay_s: float = 0.0,
+        fail: Exception | None = None,
+    ):
+        self._reply = reply
+        self._provider = provider
+        self._model = model
+        self._delta_delay_s = delta_delay_s
+        self._fail = fail
+        self.calls: list[list[ChatMessage]] = []
+        self.closed = False
+
+    @property
+    def provider(self) -> str:
+        return self._provider
+
+    @property
+    def model(self) -> str:
+        return self._model
+
+    @property
+    def is_loaded(self) -> bool:
+        return not self.closed
+
+    @property
+    def last_messages(self) -> list[ChatMessage]:
+        return self.calls[-1] if self.calls else []
+
+    def close(self) -> None:
+        self.closed = True
+
+    def _check(self, messages) -> None:
+        self.calls.append(list(messages))
+        if self._fail is not None:
+            raise self._fail
+
+    def generate(self, messages) -> LLMResult:
+        started = time.perf_counter()
+        self._check(messages)
+        if self._delta_delay_s:
+            time.sleep(self._delta_delay_s)
+        return LLMResult(
+            text=self._reply,
+            model=self._model,
+            provider=self._provider,
+            finish_reason="stop",
+            usage=LLMUsage(prompt_tokens=5, completion_tokens=len(self._reply.split()),
+                           total_tokens=5 + len(self._reply.split())),
+            latency_s=time.perf_counter() - started,
+            first_token_s=0.0,
+        )
+
+    def stream(self, messages, *, cancel: CancelToken | None = None):
+        self._check(messages)
+        for word in self._reply.split():
+            if cancel is not None and cancel.cancelled:
+                return
+            if self._delta_delay_s:
+                time.sleep(self._delta_delay_s)
+            yield word + " "
 
 _settings = get_settings()
 # Same cache layout the service uses, so a test run warms the container's volume.
@@ -119,3 +209,9 @@ def pipeline_engine(stt_engine, hf_nlu_engine, tts_engine) -> VoicePipeline:
         sample_rate=_settings.sample_rate_hz,
         chunk_samples=_settings.tts_chunk_samples,
     )
+
+
+@pytest.fixture
+def fake_llm() -> FakeLLM:
+    """A fresh scripted LLM per test, so recorded calls cannot leak between them."""
+    return FakeLLM()

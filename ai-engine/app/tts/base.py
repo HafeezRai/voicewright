@@ -16,7 +16,6 @@ backend overrides it to cancel *during* the model's forward pass.
 from __future__ import annotations
 
 import abc
-import threading
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 
@@ -24,30 +23,20 @@ import numpy as np
 
 from app.audio_io import duration_s, iter_chunks, to_wav_bytes
 
+# CancelToken now lives in app.cancellation (the LLM stage needs it too); it is
+# re-exported here so `from app.tts.base import CancelToken` keeps working.
+from app.cancellation import CancelToken
+
+__all__ = [
+    "CancelToken",
+    "SynthesisResult",
+    "TTSEngine",
+    "TTSUnavailableError",
+]
+
 
 class TTSUnavailableError(RuntimeError):
     """Raised when the TTS backend cannot be loaded (missing package/weights)."""
-
-
-class CancelToken:
-    """A thread-safe one-way cancel flag.
-
-    Set with :meth:`cancel`, tested with :attr:`cancelled`. One token covers one
-    utterance; :meth:`reset` re-arms it for the next.
-    """
-
-    def __init__(self) -> None:
-        self._event = threading.Event()
-
-    @property
-    def cancelled(self) -> bool:
-        return self._event.is_set()
-
-    def cancel(self) -> None:
-        self._event.set()
-
-    def reset(self) -> None:
-        self._event.clear()
 
 
 @dataclass(frozen=True)
