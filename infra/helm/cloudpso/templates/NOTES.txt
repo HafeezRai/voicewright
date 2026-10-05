@@ -47,7 +47,7 @@ and set secrets.create=false with secrets.existingSecret.
 
 {{- if .Values.triton.enabled }}
 Triton is enabled: populate its model repository before the pod will become
-ready (~1.6 GiB for the Laya encoder graph):
+ready (the weights are staged, not committed):
 
   python mlops-pipeline/export/export_onnx.py --model all
   python mlops-pipeline/export/populate_triton_repo.py

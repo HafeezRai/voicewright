@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-# CloudPSO Voice Agent — ai-engine (Phase 3: STT -> NLU -> TTS).
+# CloudPSO Voice Agent — ai-engine (Phase 3: STT -> LLM -> TTS).
 FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -21,8 +21,8 @@ COPY requirements.txt requirements-dev.txt ./
 
 # torch is installed from the CPU-only index first. PyPI's default linux wheel
 # drags in ~2 GB of CUDA libraries this service never uses (there is no GPU in
-# the STT/TTS path, and Laya runs on torch CPU). Installing it here means the
-# requirements.txt pass below sees it already satisfied.
+# the STT/TTS path, and the MiniLM embedder runs on torch CPU). Installing it
+# here means the requirements.txt pass below sees it already satisfied.
 RUN pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu \
         "torch>=2.2,<3.0" \
     && pip install --no-cache-dir -r requirements.txt

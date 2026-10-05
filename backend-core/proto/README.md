@@ -6,7 +6,7 @@ Phase 1 contains only `voice_gateway.proto` — an interface sketch that is **no
 compiled or imported by the application. `app/main.py` does not import generated
 stubs, so nothing here can break imports.
 
-Phase 3 owns the real STT → NLU → TTS service contract; Phase 2 owns the
+Phase 3 owns the real STT → LLM → TTS service contract; Phase 2 owns the
 gateway-side streaming RPCs. Regenerate stubs with `grpcio-tools` once the
 contract is frozen:
 

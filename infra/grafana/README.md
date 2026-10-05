@@ -5,7 +5,7 @@ Two dashboards, provisioned as code.
 | Dashboard | UID | Panels |
 |---|---|---|
 | `dashboards/cloudpso-overview.json` | `cloudpso-overview` | 9 — sessions, signalling, barge-in, VAD |
-| `dashboards/cloudpso-ai-pipeline.json` | `cloudpso-ai-pipeline` | 11 — STT/NLU/TTS latency, throughput, errors |
+| `dashboards/cloudpso-ai-pipeline.json` | `cloudpso-ai-pipeline` | 11 — STT/LLM/TTS latency, throughput, errors |
 
 Provisioning lives in `provisioning/`: a Prometheus datasource with uid
 `prometheus` (which every panel references) and a file-based dashboard provider.

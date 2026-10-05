@@ -7,11 +7,12 @@
 #
 #   STT  faster-whisper base.en        ~150 MB  (MIT; OpenAI Whisper weights)
 #   TTS  Piper en_US-amy-low (VITS)     ~80 MB  (MIT voice, Apache-2.0 runtime)
-#   NLU  Laya English checkpoint       ~840 MB  (Apache-2.0) -- OPTIONAL
+#   LLM  llama3:8b via Ollama          ~4.7 GB  (fetched by Ollama, not here)
 #
-# Laya is skipped by default: the HuggingFace fallback NLU backend works without
-# it, and 840 MB is a lot to pull for a component that is swappable. Pass
-# --with-laya to fetch it (AI_ENGINE_NLU_BACKEND=auto will then select Laya).
+# The LLM is not a weight file this script downloads: it is served by Ollama,
+# which manages its own model store. If `ollama` is on PATH the configured
+# AI_ENGINE_LLM_MODEL is pulled here; otherwise the step is skipped with a note
+# rather than failing the whole fetch.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -20,10 +21,7 @@ cd "$ROOT"
 MODELS_DIR="${AI_ENGINE_MODEL_CACHE:-$ROOT/models}"
 STT_MODEL="${AI_ENGINE_STT_MODEL:-base.en}"
 TTS_MODEL="${AI_ENGINE_TTS_MODEL:-vits-piper-en_US-amy-low}"
-WITH_LAYA=false
-for arg in "$@"; do
-    [ "$arg" = "--with-laya" ] && WITH_LAYA=true
-done
+LLM_MODEL="${AI_ENGINE_LLM_MODEL:-llama3:8b}"
 
 # All HuggingFace downloads live under <models>/hf/hub so the layout matches the
 # running service (see app/config.py: hf_home / hf_hub_cache).
@@ -58,16 +56,12 @@ else
     echo "    ok: $TTS_DIR"
 fi
 
-if [ "$WITH_LAYA" = true ]; then
-    echo "==> NLU: Laya (this is ~840 MB and takes a while)"
-    "$PYTHON" - <<'PY'
-import laya
-laya.load("convaiinnovations/laya")
-print("    ok: convaiinnovations/laya")
-PY
+echo "==> LLM: $LLM_MODEL (served by Ollama)"
+if command -v ollama >/dev/null 2>&1; then
+    ollama pull "$LLM_MODEL"
 else
-    echo "==> NLU: Laya skipped (pass --with-laya to fetch it)."
-    echo "    The pipeline will use the HuggingFace fallback (~90 MB, downloaded on first use)."
+    echo "    ollama not found on PATH; skipping the LLM pull."
+    echo "    Install Ollama and run:  ollama pull $LLM_MODEL"
 fi
 
 echo "==> done. Models under $MODELS_DIR"

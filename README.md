@@ -1,13 +1,13 @@
 # CloudPSO Voice Agent
 
-An enterprise real-time AI voice assistant: speech-to-text, natural-language
-understanding and text-to-speech over WebRTC/WebSocket, with barge-in support and
+An enterprise real-time AI voice assistant: speech-to-text, LLM-driven reply
+generation and text-to-speech over WebRTC/WebSocket, with barge-in support and
 an observability dashboard. This repository is a monorepo holding the backend
 gateway, the AI engine, the frontend dashboard, the MLOps pipeline and the
 deployment infrastructure.
 
 > **Status: Phase 5 complete.** All five phases are implemented: the WebRTC
-> gateway (Phase 2), the STT → NLU → TTS pipeline running real models (Phase 3),
+> gateway (Phase 2), the STT → LLM → TTS pipeline running real models (Phase 3),
 > the React dashboard (Phase 4), and the MLOps + deployment layer (Phase 5). See
 > `mlops-pipeline/README.md` and `infra/README.md` for exactly what has been run
 > versus only statically validated — Triton and Kubernetes are validated but were
@@ -29,7 +29,7 @@ deployment infrastructure.
    layer, importable health-check stubs.
 2. **Phase 2 — backend-core** *(done)*: WebRTC gateway, WebSocket management, VAD
    and barge-in.
-3. **Phase 3 — ai-engine** *(done)*: the STT → NLU → TTS pipeline.
+3. **Phase 3 — ai-engine** *(done)*: the STT → LLM → TTS pipeline.
 4. **Phase 4 — frontend-dashboard** *(done)*: live voice demo + observability UI.
 5. **Phase 5 — mlops-pipeline + infra** *(done)*: ONNX export with numerical
    parity, Triton configs, K8s manifests, Helm chart, Prometheus rules, Grafana
@@ -45,7 +45,7 @@ cloudpso/
 │   ├── app/             #   config.py, main.py (GET /health)
 │   ├── proto/           #   gRPC contract placeholder (not compiled yet)
 │   └── tests/           #   pytest health + config tests
-├── ai-engine/           # STT → NLU → TTS pipeline (Phase 3)
+├── ai-engine/           # STT → LLM → TTS pipeline (Phase 3)
 │   ├── app/             #   config.py, main.py (GET /health)
 │   └── tests/           #   pytest health + config tests
 ├── mlops-pipeline/      # ONNX export, Triton repo, pipeline configs (Phase 5)

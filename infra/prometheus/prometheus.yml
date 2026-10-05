@@ -34,7 +34,7 @@ scrape_configs:
         labels:
           service: backend-core
 
-  # ai-engine — STT/NLU/TTS latency and throughput metrics.
+  # ai-engine — STT/LLM/TTS latency and throughput metrics.
   # Series: cloudpso_ai_* (see ai-engine/app/metrics.py).
   - job_name: ai-engine
     metrics_path: /metrics

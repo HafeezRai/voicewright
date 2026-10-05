@@ -1,4 +1,4 @@
-# ai-engine: STT -> NLU -> TTS pipeline (HTTP + gRPC VoiceGateway).
+# ai-engine: STT -> LLM -> TTS pipeline (HTTP + gRPC VoiceGateway).
 #
 # Model weights live on a ReadWriteMany PVC so replicas share one copy rather
 # than each pulling ~1 GB. In production this is normally an RWX volume
@@ -16,7 +16,10 @@ spec:
   accessModes: ["ReadWriteMany"]
   resources:
     requests:
-      storage: 10Gi        # STT ~150 MB + TTS ~80 MB + Laya ~840 MB + headroom
+      # STT ~150 MB + TTS ~80 MB + the MiniLM embedder ~90 MB, plus headroom.
+      # The generative LLM is NOT stored here: it is served by Ollama (or another
+      # OpenAI-compatible endpoint) reached over AI_ENGINE_LLM_BASE_URL.
+      storage: 10Gi
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -75,9 +78,11 @@ spec:
                   key: HUGGING_FACE_HUB_TOKEN
                   optional: true
           resources:
-            # Sized for CPU inference of Whisper-base + MiniLM/Laya. The
-            # startup probe window is generous because the first request after a
-            # cold start loads weights.
+            # Sized for the in-process CPU work: Whisper-base STT + the MiniLM
+            # embedder. The LLM runs elsewhere (Ollama on the host / an
+            # in-cluster Service), so this pod holds no LLM weights. The startup
+            # probe window is generous because the first request after a cold
+            # start loads weights.
             requests:
               cpu: "500m"
               memory: "1Gi"

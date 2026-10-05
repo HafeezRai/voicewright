@@ -3,8 +3,8 @@ name: CI
 # Install -> lint -> test -> validate deployment assets -> build images.
 #
 # Every command here is one that has been run by hand on this repository; the
-# suites are the real ones (backend-core 47, ai-engine 105, frontend 40,
-# mlops 10, infra 5). Nothing is a placeholder.
+# suites are the real ones (backend-core 47, ai-engine 182, frontend 41,
+# mlops 9, infra 5). Nothing is a placeholder.
 
 on:
   push:
@@ -65,8 +65,10 @@ jobs:
           pip install -r requirements.txt -r requirements-dev.txt
       - name: Fetch model weights
         working-directory: ai-engine
-        # STT + TTS only (~230 MB). Laya is optional and the HF fallback covers
-        # it, matching how the suite is written (models that are absent skip).
+        # STT + TTS only (~230 MB). The LLM is not a downloaded weight: it is
+        # served by Ollama, which is absent on the runner, so the live Ollama
+        # test skips cleanly. The unit suite drives a deterministic FakeLLM, so
+        # nothing in the default run needs the model either.
         run: ./scripts/fetch_models.sh
       - name: Lint (ruff)
         working-directory: ai-engine

@@ -73,7 +73,7 @@ Probes are wired to the **actual** health endpoints, not placeholders:
   (plus an optional `triton:8002`). The rule file pre-computes stage p95s and
   error ratios and raises alerts for service-down, high pipeline latency, error
   ratios, signalling/VAD anomalies and VAD backend degradation.
-* **Grafana** ships two dashboards — *Voice Gateway* and *STT/NLU/TTS Pipeline* —
+* **Grafana** ships two dashboards — *Voice Gateway* and *STT/LLM/TTS Pipeline* —
   built **only** from series that exist in the two `metrics.py` files. The
   `infra/tests` suite enforces that: a panel querying a metric nobody emits fails
   the build.

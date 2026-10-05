@@ -1,7 +1,7 @@
 # HorizontalPodAutoscalers.
 #
 # Scale on CPU. The honest caveat: the operationally interesting signal for this
-# system is *concurrent WebRTC sessions* and p95 STT/NLU/TTS latency -- not CPU --
+# system is *concurrent WebRTC sessions* and p95 STT/LLM/TTS latency -- not CPU --
 # and neither is a Kubernetes resource metric. A production setup would scale on
 # a custom/external metric (e.g. cloudpso_active_webrtc_sessions via Prometheus
 # Adapter, or cloudpso_ai_stt_latency_seconds). CPU is the portable default that

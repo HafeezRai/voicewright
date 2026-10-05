@@ -37,7 +37,14 @@ data:
   # CPU in-cluster by default: the models are small and the GPU (if any) is
   # reserved for Triton. Set to `cuda` on a GPU node pool.
   AI_ENGINE_DEVICE: "cpu"
-  AI_ENGINE_NLU_BACKEND: "auto"
+  # The think stage: a generative LLM replaces the old intent classifier. Point
+  # AI_ENGINE_LLM_BASE_URL at an in-cluster or external OpenAI-compatible
+  # endpoint (an Ollama Service, vLLM, DeepSeek, ...). NB: host.docker.internal
+  # is a Docker Desktop convenience and does NOT resolve inside a cluster.
+  AI_ENGINE_LLM_PROVIDER: "ollama"
+  AI_ENGINE_LLM_BASE_URL: "http://ollama:11434/v1"
+  AI_ENGINE_LLM_MODEL: "llama3:8b"
+  AI_ENGINE_EMBEDDING_MODEL: "sentence-transformers/all-MiniLM-L6-v2"
   AI_ENGINE_STT_MODEL: "base.en"
   AI_ENGINE_TTS_MODEL: "vits-piper-en_US-amy-low"
 

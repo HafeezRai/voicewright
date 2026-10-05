@@ -11,12 +11,15 @@
 #   cloudpso_ai_stt_requests_total             counter{status}
 #   cloudpso_ai_stt_latency_seconds            histogram
 #   cloudpso_ai_stt_audio_seconds              histogram
-#   cloudpso_ai_nlu_requests_total             counter{backend,status}
-#   cloudpso_ai_nlu_latency_seconds            histogram{backend}
+#   cloudpso_ai_llm_requests_total             counter{provider,status}
+#   cloudpso_ai_llm_latency_seconds            histogram{provider}
+#   cloudpso_ai_llm_first_token_seconds        histogram{provider}
+#   cloudpso_ai_llm_tokens_total               counter{provider,kind}
+#   cloudpso_ai_llm_cancelled_total            counter{provider}
 #   cloudpso_ai_tts_requests_total             counter{status}
 #   cloudpso_ai_tts_latency_seconds            histogram
 #   cloudpso_ai_tts_cancelled_total            counter
-#   cloudpso_ai_pipeline_requests_total        counter{status,nlu_backend}
+#   cloudpso_ai_pipeline_requests_total        counter{status,llm_provider}
 #   cloudpso_ai_pipeline_latency_seconds       histogram
 #   cloudpso_ai_grpc_audio_frames_total        counter
 #   cloudpso_ai_grpc_events_total              counter{kind}
@@ -30,8 +33,12 @@ groups:
     rules:
       - record: cloudpso:stt_latency_p95_seconds
         expr: histogram_quantile(0.95, sum by (le) (rate(cloudpso_ai_stt_latency_seconds_bucket[5m])))
-      - record: cloudpso:nlu_latency_p95_seconds
-        expr: histogram_quantile(0.95, sum by (le) (rate(cloudpso_ai_nlu_latency_seconds_bucket[5m])))
+      - record: cloudpso:llm_latency_p95_seconds
+        expr: histogram_quantile(0.95, sum by (le) (rate(cloudpso_ai_llm_latency_seconds_bucket[5m])))
+      # First-token latency, pre-computed like the rest: it is the metric whose
+      # regression means "the agent feels broken" (see CloudPSOLLMFirstTokenHighLatency).
+      - record: cloudpso:llm_first_token_p95_seconds
+        expr: histogram_quantile(0.95, sum by (le) (rate(cloudpso_ai_llm_first_token_seconds_bucket[5m])))
       - record: cloudpso:tts_latency_p95_seconds
         expr: histogram_quantile(0.95, sum by (le) (rate(cloudpso_ai_tts_latency_seconds_bucket[5m])))
       - record: cloudpso:pipeline_latency_p95_seconds
@@ -74,18 +81,41 @@ groups:
             Either the service is down or /metrics is unreachable.
 
       - alert: CloudPSOPipelineHighLatency
-        # The whole point of the system is an interactive turn; 1.5 s p95 for a
-        # full STT->NLU->TTS turn is the budget this repo is built around.
-        expr: cloudpso:pipeline_latency_p95_seconds > 1.5
+        # The whole point of the system is an interactive turn. The old 1.5 s
+        # budget was set when the middle stage was a ~30 ms intent classifier;
+        # the stage is now a generative LLM, and a local llama3:8b turn is
+        # seconds, not milliseconds. 6 s p95 is the "something is genuinely
+        # wrong" line, and the LLM is almost always the dominant stage when it
+        # trips -- STT and TTS both stay well under a second.
+        expr: cloudpso:pipeline_latency_p95_seconds > 6
         for: 5m
         labels:
           severity: warning
         annotations:
-          summary: "Voice pipeline p95 latency above 1.5 s"
+          summary: "Voice pipeline p95 latency above 6 s"
           description: >-
             p95 full-turn latency is {{ $value | humanizeDuration }} over the
-            last 5 minutes. Check which stage dominates with the per-stage p95
-            recording rules (cloudpso:stt_latency_p95_seconds, nlu, tts).
+            last 5 minutes. The LLM stage dominates the budget -- check
+            cloudpso:llm_latency_p95_seconds first, then stt/tts.
+
+      - alert: CloudPSOLLMFirstTokenHighLatency
+        # First-token latency is the metric whose regression actually means "the
+        # agent feels broken": total latency can be healthy while the user sits
+        # in dead air waiting for the reply to start. A cold local llama3:8b load
+        # is a handful of seconds; sustained first-token p95 above 3 s means the
+        # model is reloading on every turn (keep_alive / warm-up broken) or the
+        # endpoint is slow -- not merely that it is chatty.
+        expr: cloudpso:llm_first_token_p95_seconds > 3
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "LLM first-token p95 above 3 s"
+          description: >-
+            p95 time from request to the first streamed token is
+            {{ $value | humanizeDuration }} over the last 5 minutes. That is
+            dead air before the agent begins to speak -- usually a model being
+            reloaded every turn rather than a slow model.
 
       - alert: CloudPSOSTTHighErrorRatio
         expr: cloudpso:stt_error_ratio > 0.05

@@ -51,7 +51,15 @@ services:
       AI_ENGINE_MODEL_CACHE: ${AI_ENGINE_MODEL_CACHE:-/models}
       # Phase 3: pipeline backends and the gRPC VoiceGateway port.
       AI_ENGINE_DEVICE: ${AI_ENGINE_DEVICE:-cpu}
-      AI_ENGINE_NLU_BACKEND: ${AI_ENGINE_NLU_BACKEND:-auto}
+      # The think stage: an OpenAI-compatible LLM, a local Ollama by default.
+      # Inside compose the *host's* Ollama is reachable at host.docker.internal,
+      # NOT 127.0.0.1 -- that is the container's own loopback, where no Ollama is
+      # listening. Docker Desktop resolves host.docker.internal for you; on Linux
+      # add `extra_hosts: ["host.docker.internal:host-gateway"]` to this service.
+      AI_ENGINE_LLM_PROVIDER: ${AI_ENGINE_LLM_PROVIDER:-ollama}
+      AI_ENGINE_LLM_BASE_URL: ${AI_ENGINE_LLM_BASE_URL:-http://host.docker.internal:11434/v1}
+      AI_ENGINE_LLM_MODEL: ${AI_ENGINE_LLM_MODEL:-llama3:8b}
+      AI_ENGINE_EMBEDDING_MODEL: ${AI_ENGINE_EMBEDDING_MODEL:-sentence-transformers/all-MiniLM-L6-v2}
       AI_ENGINE_STT_MODEL: ${AI_ENGINE_STT_MODEL:-base.en}
       AI_ENGINE_TTS_MODEL: ${AI_ENGINE_TTS_MODEL:-vits-piper-en_US-amy-low}
       AI_ENGINE_GRPC_ENABLED: ${AI_ENGINE_GRPC_ENABLED:-true}

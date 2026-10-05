@@ -8,7 +8,7 @@
 #
 # The model repository is served from an RWX PVC populated out-of-band by
 #   mlops-pipeline/export/populate_triton_repo.py
-# (the Laya encoder graph is ~1.6 GiB, so it does not live in the image).
+# (the weights are staged there, not baked into the image).
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:

@@ -1,6 +1,6 @@
 {
   "uid": "cloudpso-ai-pipeline",
-  "title": "CloudPSO \u2014 STT/NLU/TTS Pipeline",
+  "title": "CloudPSO \u2014 STT/LLM/TTS Pipeline",
   "tags": [
     "cloudpso",
     "ai"
@@ -24,7 +24,7 @@
       "id": 1,
       "type": "stat",
       "title": "Full turn p95",
-      "description": "cloudpso_ai_pipeline_latency_seconds \u2014 p95 STT->NLU->TTS turn latency (recording rule).",
+      "description": "cloudpso_ai_pipeline_latency_seconds \u2014 p95 STT->LLM->TTS turn latency (recording rule).",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -145,8 +145,8 @@
     {
       "id": 3,
       "type": "stat",
-      "title": "NLU p95",
-      "description": "cloudpso_ai_nlu_latency_seconds p95.",
+      "title": "LLM p95",
+      "description": "cloudpso_ai_llm_latency_seconds p95.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -190,7 +190,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "cloudpso:nlu_latency_p95_seconds",
+          "expr": "cloudpso:llm_latency_p95_seconds",
           "datasource": {
             "type": "prometheus",
             "uid": "prometheus"
@@ -307,12 +307,12 @@
         },
         {
           "refId": "B",
-          "expr": "cloudpso:nlu_latency_p95_seconds",
+          "expr": "cloudpso:llm_latency_p95_seconds",
           "datasource": {
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "legendFormat": "NLU"
+          "legendFormat": "LLM"
         },
         {
           "refId": "C",
@@ -397,8 +397,8 @@
     {
       "id": 12,
       "type": "timeseries",
-      "title": "Pipeline turns by NLU backend",
-      "description": "cloudpso_ai_pipeline_requests_total{nlu_backend} \u2014 shows when Laya degrades to the HF fallback.",
+      "title": "Pipeline turns by LLM provider",
+      "description": "cloudpso_ai_pipeline_requests_total{llm_provider} \u2014 turns split by the LLM backend that answered.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -436,12 +436,12 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (nlu_backend,status) (rate(cloudpso_ai_pipeline_requests_total[5m]))",
+          "expr": "sum by (llm_provider,status) (rate(cloudpso_ai_pipeline_requests_total[5m]))",
           "datasource": {
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "legendFormat": "{{nlu_backend}}/{{status}}"
+          "legendFormat": "{{llm_provider}}/{{status}}"
         }
       ]
     },
