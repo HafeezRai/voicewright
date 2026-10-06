@@ -7,7 +7,7 @@ import {
   runAgentTurn,
   streamAgentTurn,
 } from "../lib/agents";
-import { blobToMonoWav, pickRecorderMimeType } from "../lib/audio";
+import { PcmCapture, resampleToMonoWav } from "../lib/audio";
 import { ProgressivePlayer } from "../lib/player";
 import { TurnDetector } from "../lib/vad";
 import { StatusPill } from "./StatusPill";
@@ -66,7 +66,7 @@ export function TalkToAgent({ agent }: { agent: Agent }) {
   const [notice, setNotice] = useState<string | null>(null);
   const [level, setLevel] = useState<{ rms: number; phase: string }>({ rms: 0, phase: "idle" });
 
-  const recorderRef = useRef<MediaRecorder | null>(null);
+  const captureRef = useRef<PcmCapture | null>(null);
   const micRef = useRef<MediaStream | null>(null);
   const detectorRef = useRef<TurnDetector | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -88,9 +88,8 @@ export function TalkToAgent({ agent }: { agent: Agent }) {
     inCallRef.current = false;
     detectorRef.current?.stop();
     detectorRef.current = null;
-    const recorder = recorderRef.current;
-    if (recorder && recorder.state !== "inactive") recorder.stop();
-    recorderRef.current = null;
+    captureRef.current?.stop();
+    captureRef.current = null;
     micRef.current?.getTracks().forEach((track) => track.stop());
     micRef.current = null;
     playerRef.current?.stop();
@@ -221,54 +220,32 @@ export function TalkToAgent({ agent }: { agent: Agent }) {
     [agent.id, ensurePlayer, patch, pushResult],
   );
 
-  /**
-   * Start a fresh recorder for this utterance.
-   *
-   * One recorder *per utterance*, not one for the whole call. A WebM/Opus
-   * stream carries its container header in the opening chunks, so a slice taken
-   * from the middle of a long recording is not a decodable file -- the first
-   * utterance works and every one after it fails with "Unable to decode audio
-   * data". Starting a recorder per turn means each capture is a complete file.
-   */
+  /** Mark the start of an utterance; anything captured before it is dropped. */
   const beginCapture = useCallback(() => {
-    if (recorderRef.current) return;
-    const stream = micRef.current;
-    if (!stream) return;
-
-    const captured: Blob[] = [];
-    const mimeType = pickRecorderMimeType();
-    const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
-    recorder.ondataavailable = (event) => {
-      if (event.data.size > 0) captured.push(event.data);
-    };
-    recorder.onstop = () => {
-      recorderRef.current = null;
-      if (captured.length === 0) {
-        if (inCallRef.current) setCallState("listening");
-        return;
-      }
-      const raw = new Blob(captured, { type: recorder.mimeType || "audio/webm" });
-      void (async () => {
-        try {
-          const wav = await blobToMonoWav(raw);
-          setCallState("thinking");
-          await streamTurn(wav, true);
-        } catch (error) {
-          setNotice(`Could not prepare the recording: ${describe(error)}`);
-        } finally {
-          if (inCallRef.current) setCallState("listening");
-        }
-      })();
-    };
-    recorder.start();
-    recorderRef.current = recorder;
-  }, [streamTurn]);
-
-  /** Close the current utterance's recorder; its `onstop` does the sending. */
-  const endCapture = useCallback(() => {
-    const recorder = recorderRef.current;
-    if (recorder && recorder.state !== "inactive") recorder.stop();
+    captureRef.current?.begin();
   }, []);
+
+  /** End the utterance and send what was captured. */
+  const endCapture = useCallback(() => {
+    const capture = captureRef.current;
+    if (!capture) return;
+    const recorded = capture.finish();
+    if (!recorded || recorded.samples.length === 0) {
+      if (inCallRef.current) setCallState("listening");
+      return;
+    }
+    void (async () => {
+      try {
+        const wav = await resampleToMonoWav(recorded.samples, recorded.sampleRate);
+        setCallState("thinking");
+        await streamTurn(wav, true);
+      } catch (error) {
+        setNotice(`Could not prepare the recording: ${describe(error)}`);
+      } finally {
+        if (inCallRef.current) setCallState("listening");
+      }
+    })();
+  }, [streamTurn]);
 
   const startCall = useCallback(async () => {
     setNotice(null);
@@ -285,6 +262,11 @@ export function TalkToAgent({ agent }: { agent: Agent }) {
       });
       micRef.current = stream;
       inCallRef.current = true;
+
+      // Raw PCM, not MediaRecorder: see PcmCapture for why.
+      const capture = new PcmCapture();
+      await capture.start(stream);
+      captureRef.current = capture;
 
       const detector = new TurnDetector({
         onSpeechStart: () => {
@@ -364,40 +346,39 @@ export function TalkToAgent({ agent }: { agent: Agent }) {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       micRef.current = stream;
-      const captured: Blob[] = [];
-      const mimeType = pickRecorderMimeType();
-      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
-      recorderRef.current = recorder;
-      recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) captured.push(event.data);
-      };
-      recorder.onstop = async () => {
-        stream.getTracks().forEach((track) => track.stop());
-        micRef.current = null;
-        if (captured.length === 0) return;
-        setBusy(true);
-        try {
-          await sendBatch(
-            await blobToMonoWav(new Blob(captured, { type: recorder.mimeType || "audio/webm" })),
-          );
-        } catch (error) {
-          setNotice(`Could not prepare the recording: ${describe(error)}`);
-        } finally {
-          setBusy(false);
-        }
-      };
-      recorder.start();
+      // Same raw-PCM capture as call mode, for the same reason: MediaRecorder
+      // hands back a container that Safari cannot decode back into samples.
+      const capture = new PcmCapture();
+      await capture.start(stream);
+      captureRef.current = capture;
+      capture.begin();
       setRecording(true);
     } catch (error) {
       setNotice(`Microphone unavailable: ${describe(error)}`);
     }
-  }, [sendBatch]);
+  }, []);
 
   const stopRecording = useCallback(() => {
-    const recorder = recorderRef.current;
-    if (recorder && recorder.state === "recording") recorder.stop();
     setRecording(false);
-  }, []);
+    const capture = captureRef.current;
+    captureRef.current = null;
+    micRef.current?.getTracks().forEach((track) => track.stop());
+    micRef.current = null;
+    const recorded = capture?.finish();
+    capture?.stop();
+    if (!recorded || recorded.samples.length === 0) return;
+
+    void (async () => {
+      setBusy(true);
+      try {
+        await sendBatch(await resampleToMonoWav(recorded.samples, recorded.sampleRate));
+      } catch (error) {
+        setNotice(`Could not prepare the recording: ${describe(error)}`);
+      } finally {
+        setBusy(false);
+      }
+    })();
+  }, [sendBatch]);
 
   const inCall = callState !== "off";
 

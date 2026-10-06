@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { AiEngineError, type AgentReply, ask, synthesize, transcribe } from "../lib/aiEngine";
-import { blobToMonoWav, pickRecorderMimeType } from "../lib/audio";
+import { PcmCapture, resampleToMonoWav } from "../lib/audio";
 import { StatusPill } from "./StatusPill";
 
 interface Turn {
@@ -17,8 +17,8 @@ interface Turn {
 
 /**
  * The transcript + reply pane. It drives ai-engine's real `/stt`, `/llm` and
- * `/tts` endpoints from the browser: record a clip (MediaRecorder -> WAV via
- * `blobToMonoWav`), transcribe it, ask the agent for a reply, and synthesise
+ * `/tts` endpoints from the browser: capture a clip as raw PCM (see
+ * `PcmCapture`), transcribe it, ask the agent for a reply, and synthesise
  * that reply to the speakers.
  *
  * `onAgentSpeaking` is called while TTS audio plays so the voice panel can tell
@@ -32,16 +32,15 @@ export function AgentTurnPanel({ onAgentSpeaking }: { onAgentSpeaking?: (speakin
   const [recording, setRecording] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
-  const recorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
+  const captureRef = useRef<PcmCapture | null>(null);
   const micRef = useRef<MediaStream | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const nextId = useRef(1);
 
   useEffect(() => {
     return () => {
-      const recorder = recorderRef.current;
-      if (recorder && recorder.state === "recording") recorder.stop();
+      captureRef.current?.stop();
+      captureRef.current = null;
       micRef.current?.getTracks().forEach((track) => track.stop());
       if (audioRef.current?.src) URL.revokeObjectURL(audioRef.current.src);
     };
@@ -101,49 +100,49 @@ export function AgentTurnPanel({ onAgentSpeaking }: { onAgentSpeaking?: (speakin
   }, [onAgentSpeaking, text]);
 
   const stopRecording = useCallback(() => {
-    recorderRef.current?.stop();
-  }, []);
+    setRecording(false);
+    const capture = captureRef.current;
+    captureRef.current = null;
+    micRef.current?.getTracks().forEach((track) => track.stop());
+    micRef.current = null;
+    const recorded = capture?.finish();
+    capture?.stop();
+    if (!recorded || recorded.samples.length === 0) return;
+
+    void (async () => {
+      setBusy(true);
+      const id = addTurn({ source: "stt", text: "transcribing…", pending: true });
+      try {
+        const wav = await resampleToMonoWav(recorded.samples, recorded.sampleRate, 16000);
+        const result = await transcribe(wav);
+        const heard = result.text.trim() || "(no speech detected)";
+        updateTurn(id, { text: heard, pending: true });
+        await runAsk(heard, id);
+      } catch (error) {
+        updateTurn(id, { pending: false, error: describe(error), text: "(transcription failed)" });
+      } finally {
+        setBusy(false);
+      }
+    })();
+  }, [addTurn, runAsk, updateTurn]);
 
   const startRecording = useCallback(async () => {
     setNotice(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
       micRef.current = stream;
-      const mimeType = pickRecorderMimeType();
-      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
-      chunksRef.current = [];
-      recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) chunksRef.current.push(event.data);
-      };
-      recorder.onstop = () => {
-        void (async () => {
-          stream.getTracks().forEach((track) => track.stop());
-          micRef.current = null;
-          setRecording(false);
-          const blob = new Blob(chunksRef.current, { type: mimeType ?? "audio/webm" });
-          if (blob.size === 0) return;
-          setBusy(true);
-          const id = addTurn({ source: "stt", text: "transcribing…", pending: true });
-          try {
-            const wav = await blobToMonoWav(blob, 16000);
-            const result = await transcribe(wav);
-            const heard = result.text.trim() || "(no speech detected)";
-            updateTurn(id, { text: heard, pending: true });
-            await runAsk(heard, id);
-          } catch (error) {
-            updateTurn(id, { pending: false, error: describe(error), text: "(transcription failed)" });
-          } finally {
-            setBusy(false);
-          }
-        })();
-      };
-      recorder.start();
-      recorderRef.current = recorder;
+      // Raw PCM, not MediaRecorder: see PcmCapture. MediaRecorder's output is a
+      // compressed container that has to be decoded back to samples, and Safari
+      // refuses to decode the fragmented MP4 it produced itself.
+      const capture = new PcmCapture();
+      await capture.start(stream);
+      captureRef.current = capture;
+      capture.begin();
       setRecording(true);
     } catch (error) {
       setNotice(describe(error));
     }
-  }, [addTurn, runAsk, updateTurn]);
+  }, []);
 
   return (
     <section className="rounded-2xl border border-cloudpso-line bg-cloudpso-panel p-5">
