@@ -96,6 +96,25 @@ export function AgentBuilder({ onSelect }: { onSelect?: (agent: Agent | null) =>
     return () => controller.abort();
   }, [refresh]);
 
+  /**
+   * The picker's value for the form's current provider/model.
+   *
+   * An agent saved before `provider` existed has a model but no provider, so
+   * the provider is recovered from the catalogue by model name. Without this
+   * the select matches no option and silently renders blank -- which looks like
+   * the model was never set at all.
+   */
+  const selectedOptionKey = (() => {
+    if (!form.model) return "";
+    const options = catalogue?.options ?? [];
+    const exact = options.find(
+      (option) => option.model === form.model && option.provider === (form.provider || "ollama"),
+    );
+    if (exact) return `${exact.provider}:${exact.model}`;
+    const byModel = options.find((option) => option.model === form.model);
+    return byModel ? `${byModel.provider}:${byModel.model}` : "";
+  })();
+
   /** Names of the tools currently ticked in the form. */
   const chosenTools = (form.tools ?? []).map((entry) => entry.name);
 
@@ -133,28 +152,6 @@ export function AgentBuilder({ onSelect }: { onSelect?: (agent: Agent | null) =>
     setEditingId(null);
   }, []);
 
-  const onSubmit = useCallback(async () => {
-    const name = (form.name ?? "").trim();
-    if (!name) {
-      setError("An agent needs a name.");
-      return;
-    }
-    setBusy(true);
-    setError(null);
-    try {
-      const saved = editingId
-        ? await updateAgent(editingId, form)
-        : await createAgent({ ...form, name });
-      await refresh();
-      setSelectedId(saved.id);
-      resetForm();
-    } catch (cause) {
-      setError(describe(cause));
-    } finally {
-      setBusy(false);
-    }
-  }, [editingId, form, refresh, resetForm]);
-
   /** Fill the form from a preset, so the first step is talking, not writing. */
   const applyPreset = useCallback((presetId: string) => {
     const preset = AGENT_PRESETS.find((entry) => entry.id === presetId);
@@ -184,6 +181,41 @@ export function AgentBuilder({ onSelect }: { onSelect?: (agent: Agent | null) =>
       tools: (agent.tools ?? []).map((entry) => ({ name: entry.name })),
     });
   }, []);
+
+  /**
+   * Load an agent into the form, and make it the one the console talks to.
+   *
+   * These used to be two separate selections -- pick in the list to talk, click
+   * Edit to change -- which meant changing the model in the form could silently
+   * affect a different agent than the conversation was running against.
+   */
+  const openAgent = useCallback((agent: Agent) => {
+    setSelectedId(agent.id);
+    onEdit(agent);
+  }, [onEdit]);
+
+  const onSubmit = useCallback(async () => {
+    const name = (form.name ?? "").trim();
+    if (!name) {
+      setError("An agent needs a name.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const saved = editingId
+        ? await updateAgent(editingId, form)
+        : await createAgent({ ...form, name });
+      await refresh();
+      // Keep it open. Blanking the form after a save leaves the sidebar empty
+      // while the console is still talking to that agent.
+      openAgent(saved);
+    } catch (cause) {
+      setError(describe(cause));
+    } finally {
+      setBusy(false);
+    }
+  }, [editingId, form, openAgent, refresh]);
 
   const onDelete = useCallback(
     async (agent: Agent) => {
@@ -324,7 +356,7 @@ export function AgentBuilder({ onSelect }: { onSelect?: (agent: Agent | null) =>
           <label className="flex flex-col gap-1 text-[11px] text-cloudpso-muted">
             Model
             <select
-              value={form.model ? `${form.provider || "ollama"}:${form.model}` : ""}
+              value={selectedOptionKey}
               onChange={(event) => {
                 const [provider, ...rest] = event.target.value.split(":");
                 setForm((prev) => ({
@@ -416,7 +448,17 @@ export function AgentBuilder({ onSelect }: { onSelect?: (agent: Agent | null) =>
       <section className="rounded-xl border border-cloudpso-line bg-cloudpso-panel p-4">
         <header className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-semibold">Agents</h2>
-          <StatusPill label={`${agents.length}`} tone="info" testId="agent-count" />
+          <div className="flex items-center gap-2">
+            <StatusPill label={`${agents.length}`} tone="info" testId="agent-count" />
+            <button
+              type="button"
+              onClick={resetForm}
+              data-testid="new-agent"
+              className="rounded-full border border-cloudpso-line px-2.5 py-1 text-[11px] text-cloudpso-muted transition hover:border-cloudpso-accent/60 hover:text-slate-100"
+            >
+              + New
+            </button>
+          </div>
         </header>
         {agents.length === 0 ? (
           <p className="text-[11px] text-cloudpso-muted">
@@ -438,7 +480,7 @@ export function AgentBuilder({ onSelect }: { onSelect?: (agent: Agent | null) =>
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <button
                       type="button"
-                      onClick={() => setSelectedId(agent.id)}
+                      onClick={() => openAgent(agent)}
                       className="min-w-0 text-left"
                     >
                       <p className="truncate text-sm font-medium">{agent.name}</p>
@@ -452,8 +494,9 @@ export function AgentBuilder({ onSelect }: { onSelect?: (agent: Agent | null) =>
                         type="button"
                         onClick={() => onEdit(agent)}
                         className="text-cloudpso-muted transition hover:text-slate-100"
+                        title="Reset the form to this agent's saved values"
                       >
-                        Edit
+                        Revert
                       </button>
                       <button
                         type="button"

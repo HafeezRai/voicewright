@@ -477,6 +477,19 @@ export function TalkToAgent({ agent }: { agent: Agent }) {
       {/* ---- status bar ---- */}
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-cloudpso-line px-4 py-3">
         <div className="flex items-center gap-2">
+          {/* Which agent, on which model. Changing the model in the sidebar is
+              otherwise indistinguishable from changing it for a different
+              agent -- which is exactly the confusion this removes. */}
+          <span
+            className="text-xs font-medium text-slate-100"
+            data-testid="active-agent"
+            title="The agent this conversation is running against"
+          >
+            {agent.name}
+          </span>
+          <span className="font-mono text-[10px] text-cloudpso-muted" data-testid="active-model">
+            {agent.model ? `${agent.provider || "ollama"}/${agent.model}` : "service default"}
+          </span>
           <StatusPill
             label={
               mode === "call"
