@@ -1,11 +1,15 @@
 import { expect, test } from "@playwright/test";
 
 /**
- * Browser end-to-end for the streaming ("live") reply mode.
+ * Browser end-to-end for hands-free call mode.
  *
- * This is the one spec that needs a working LLM: unlike the WebRTC specs, a
- * streamed reply cannot be faked at the transport layer without testing nothing.
- * It skips cleanly when Ollama is not answering, so the suite still runs on a
+ * The claim: a caller presses "Start call" once, talks, and the agent answers
+ * on its own -- no stop button, no send button. Everything after the single
+ * click in this spec is the product working by itself.
+ *
+ * This is the one spec that needs a working LLM: a streamed, turn-detected
+ * reply cannot be faked at the transport layer without testing nothing. It
+ * skips cleanly when Ollama is not answering, so the suite still runs on a
  * machine without a model.
  */
 const AI_ENGINE = "http://127.0.0.1:18001";
@@ -24,8 +28,8 @@ test.beforeAll(async ({ request }) => {
   test.skip(!ok, `no LLM available at ${AI_ENGINE}; start ollama to run this spec`);
 });
 
-test("live mode speaks before the reply is finished", async ({ page }) => {
-  const name = `E2E streaming ${Date.now()}`;
+test("a call answers on its own, with no stop or send button", async ({ page }) => {
+  const name = `E2E call ${Date.now()}`;
 
   await page.goto("/");
   await page.getByTestId("agent-name").fill(name);
@@ -36,23 +40,22 @@ test("live mode speaks before the reply is finished", async ({ page }) => {
   await page.getByTestId("agent-list").getByText(name).click();
   await expect(page.getByTestId("talk-to-agent")).toBeVisible();
 
-  // Live is the default; assert it rather than assuming.
-  await page.getByTestId("mode-stream").click();
-  await expect(page.getByTestId("mode-stream")).toHaveAttribute("aria-checked", "true");
+  // Call mode is the default, and it has no send button at all -- assert that,
+  // because a stray stop button is exactly the regression being guarded here.
+  await expect(page.getByTestId("mode-call")).toHaveAttribute("aria-checked", "true");
+  await expect(page.getByTestId("record-button")).toHaveCount(0);
 
-  await page.getByTestId("record-button").click();
-  await page.waitForTimeout(4000); // let the fake mic produce a few seconds
-  await page.getByTestId("record-button").click();
+  await page.getByTestId("call-button").click();
+  await expect(page.getByTestId("call-button")).toHaveText("End call");
+  await expect(page.getByTestId("call-status")).toContainText(/Listening|Speaking/);
 
+  // From here on the page is never touched. A completed turn can only appear if
+  // silence detection ended the caller's turn by itself.
   const row = page.getByTestId("talk-to-agent").locator("li").first();
-
-  // The reply must render incrementally. `first audio` is published the moment
-  // the first chunk is scheduled -- i.e. while the reply is still growing --
-  // which is precisely what separates this mode from the batch one.
   await expect(row).toContainText("first audio", { timeout: 90_000 });
-  // A reply arrived, and it is captioned with its grounding state. This agent
-  // has no documents, so "not grounded" is the *correct* caption -- the check
-  // is that the caption exists at all.
   await expect(row).toContainText(/grounded/);
-  await expect(row).toContainText("live");
+  await expect(page.getByTestId("call-button")).toHaveText("End call");
+
+  await page.getByTestId("call-button").click();
+  await expect(page.getByTestId("call-button")).toHaveText("Start call");
 });

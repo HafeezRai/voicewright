@@ -18,9 +18,20 @@ export class ProgressivePlayer {
   private sources = new Set<AudioBufferSourceNode>();
   private scheduled = 0;
 
-  /** True once at least one chunk has been scheduled. */
+  /** True once at least one chunk has been scheduled this turn. */
   get hasAudio(): boolean {
     return this.scheduled > 0;
+  }
+
+  /**
+   * True while audio is queued or actually coming out of the speakers.
+   *
+   * This is the one to gate barge-in on. `hasAudio` stays true for the rest of
+   * the turn once the first chunk lands, so using it would have the *next*
+   * utterance count as an interruption of a reply that already finished.
+   */
+  get isPlaying(): boolean {
+    return this.sources.size > 0;
   }
 
   /** Seconds of audio queued but not yet played. */

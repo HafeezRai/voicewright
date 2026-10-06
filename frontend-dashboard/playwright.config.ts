@@ -37,8 +37,12 @@ const FRONTEND = `http://127.0.0.1:${FRONTEND_PORT}`;
 /** The origin the browser loads the dashboard from — backend CORS must allow it. */
 const CORS_ORIGIN = FRONTEND;
 
+// One utterance followed by a long pause. Chromium loops whatever this points
+// at, so the pause is what gives the agent a quiet window to answer in -- with
+// continuous speech the call's own voice-detection reads the fixture as the
+// caller interrupting.
 const SPEECH_WAV = fileURLToPath(
-  new URL("../backend-core/tests/data/speech_16k.wav", import.meta.url),
+  new URL("../backend-core/tests/data/utterance_then_pause_16k.wav", import.meta.url),
 );
 
 export default defineConfig({
