@@ -90,6 +90,11 @@ class Settings(BaseSettings):
         case_sensitive=False,
         extra="ignore",
         populate_by_name=True,
+        # `.env.example` has always said "copy this to .env", but nothing read
+        # it -- the documented workflow silently did nothing, and the only way
+        # to set a variable was to export it into the process. It is gitignored.
+        env_file=".env",
+        env_file_encoding="utf-8",
     )
 
     # --- shared / cross-service ---------------------------------------------
@@ -195,6 +200,12 @@ class Settings(BaseSettings):
     llm_model: str = Field(default="llama3:8b", alias="AI_ENGINE_LLM_MODEL")
     #: Sent as a bearer token only when set; blank for a local Ollama.
     llm_api_key: SecretStr | None = Field(default=None, alias="AI_ENGINE_LLM_API_KEY")
+    #: Per-provider keys, declared rather than read ad hoc from the environment.
+    #: `extra="ignore"` means an undeclared variable in `.env` is dropped
+    #: silently, so a key that is not a field here would appear to be set and
+    #: never be seen -- which is exactly the confusing failure to avoid.
+    deepseek_api_key: SecretStr | None = Field(default=None, alias="DEEPSEEK_API_KEY")
+    openai_api_key: SecretStr | None = Field(default=None, alias="OPENAI_API_KEY")
     llm_temperature: float = Field(
         default=0.4, ge=0.0, le=2.0, alias="AI_ENGINE_LLM_TEMPERATURE"
     )

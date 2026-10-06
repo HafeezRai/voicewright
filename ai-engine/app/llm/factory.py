@@ -56,13 +56,21 @@ def resolve_api_key(settings: Settings, provider: str | None = None) -> str | No
     Never logged, never echoed into an error.
     """
     name = (provider or settings.llm_provider or "").strip().lower()
-    if name == (settings.llm_provider or "").strip().lower() and settings.llm_api_key:
-        return settings.llm_api_key.get_secret_value()
+    # Settings first (which covers both an explicit AI_ENGINE_LLM_API_KEY and
+    # the conventional variable via `.env`), then the live environment, so
+    # exporting the usual variable works without any configuration at all.
+    declared = getattr(settings, f"{name}_api_key", None)
+    if declared is not None:
+        value = declared.get_secret_value().strip()
+        if value:
+            return value
     env_name = PROVIDER_API_KEY_ENV.get(name)
     if env_name:
         value = os.environ.get(env_name, "").strip()
         if value:
             return value
+    if name == (settings.llm_provider or "").strip().lower() and settings.llm_api_key:
+        return settings.llm_api_key.get_secret_value()
     return None
 
 
