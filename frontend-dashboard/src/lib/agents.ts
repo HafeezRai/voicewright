@@ -17,6 +17,7 @@
  */
 
 import { config } from "../config";
+import { decodePcm16 } from "./player";
 
 export interface Agent {
   id: string;
@@ -189,4 +190,148 @@ export async function runAgentTurn(agentId: string, wav: Blob): Promise<AgentTur
     body: wav,
   });
   return (await response.json()) as AgentTurn;
+}
+
+/** What a streamed turn reports when it finishes. */
+export interface StreamResult {
+  replyText: string;
+  model: string;
+  knowledgeChunks: number;
+}
+
+export interface StreamCallbacks {
+  /** Fired once, as soon as STT has a transcript. */
+  onTranscript?(text: string): void;
+  /** Fired per generated token. Concatenating these yields the full reply. */
+  onDelta?(text: string): void;
+  /** Fired per audio chunk, in order. Safely decodable with `decodePcm16`. */
+  onAudio?(pcm16: Int16Array, sampleRate: number): void;
+  onDone?(result: StreamResult): void;
+  /** The turn was cut short (a barge-in, or the model stopped early). */
+  onCancelled?(result: StreamResult): void;
+  onError?(detail: string): void;
+}
+
+function parseFrame(frame: string): { event: string; data: string } | null {
+  let event = "";
+  let data = "";
+  for (const line of frame.split("\n")) {
+    if (line.startsWith("event:")) event = line.slice(6).trim();
+    else if (line.startsWith("data:")) data += line.slice(5).trim();
+  }
+  return event ? { event, data } : null;
+}
+
+/**
+ * Stream one turn, invoking `callbacks` as events arrive.
+ *
+ * Unlike `runAgentTurn`, this resolves only when the turn is over — the point
+ * is the callbacks, not the return value. Resolves (rather than rejects) after
+ * reporting a mid-stream `error` event, because by then the HTTP status is long
+ * since sent and there is nothing left to throw at.
+ *
+ * A 404 for an unknown agent is thrown *before* any streaming starts, so a
+ * caller can still tell "no such agent" apart from a failed turn.
+ */
+export async function streamAgentTurn(
+  agentId: string,
+  wav: Blob,
+  callbacks: StreamCallbacks = {},
+  signal?: AbortSignal,
+): Promise<void> {
+  const path = `/pipeline/stream?agent_id=${encodeURIComponent(agentId)}`;
+  let response: Response;
+  try {
+    response = await fetch(`${config.aiEngineUrl}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "audio/wav", Accept: "text/event-stream" },
+      body: wav,
+      cache: "no-store",
+      signal,
+    });
+  } catch (error) {
+    if ((error as Error)?.name === "AbortError") return;
+    throw new AgentApiError(
+      `ai-engine unreachable at ${config.aiEngineUrl} (${error instanceof Error ? error.message : String(error)})`,
+    );
+  }
+
+  if (!response.ok) {
+    let detail = `HTTP ${response.status}`;
+    try {
+      const payload = (await response.json()) as { detail?: unknown };
+      if (typeof payload?.detail === "string") detail = payload.detail;
+    } catch {
+      /* non-JSON error body */
+    }
+    throw new AgentApiError(`${path} failed: ${detail}`, response.status);
+  }
+
+  const reader = response.body?.getReader();
+  if (!reader) throw new AgentApiError("this browser cannot read a streamed response");
+
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  const handle = (frame: string): boolean => {
+    const parsed = parseFrame(frame);
+    if (!parsed) return false;
+    let data: Record<string, unknown> = {};
+    try {
+      data = JSON.parse(parsed.data) as Record<string, unknown>;
+    } catch {
+      return false;
+    }
+    switch (parsed.event) {
+      case "transcript":
+        callbacks.onTranscript?.(String(data.text ?? ""));
+        return false;
+      case "reply_delta":
+        callbacks.onDelta?.(String(data.text ?? ""));
+        return false;
+      case "audio": {
+        const sampleRate = Number(data.sample_rate ?? 0);
+        const pcm16 = decodePcm16(String(data.pcm16 ?? ""));
+        callbacks.onAudio?.(pcm16, sampleRate);
+        return false;
+      }
+      case "done":
+      case "cancelled": {
+        const result: StreamResult = {
+          replyText: String(data.reply_text ?? ""),
+          model: String(data.model ?? ""),
+          knowledgeChunks: Number(data.knowledge_chunks ?? 0),
+        };
+        if (parsed.event === "done") callbacks.onDone?.(result);
+        else callbacks.onCancelled?.(result);
+        return true;
+      }
+      case "error":
+        callbacks.onError?.(String(data.detail ?? "stream failed"));
+        return true;
+      default:
+        return false;
+    }
+  };
+
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      // SSE frames are separated by a blank line. A frame can straddle two
+      // network reads, so only complete frames are consumed and the remainder
+      // stays buffered.
+      let boundary = buffer.indexOf("\n\n");
+      while (boundary !== -1) {
+        const frame = buffer.slice(0, boundary);
+        buffer = buffer.slice(boundary + 2);
+        if (handle(frame)) return;
+        boundary = buffer.indexOf("\n\n");
+      }
+    }
+    if (buffer.trim()) handle(buffer);
+  } finally {
+    reader.releaseLock();
+  }
 }

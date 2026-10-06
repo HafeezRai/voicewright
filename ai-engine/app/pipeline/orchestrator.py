@@ -170,6 +170,12 @@ class PipelineEvent:
     text: str | None = None
     audio: np.ndarray | None = None
     sample_rate: int = 0
+    #: Set on ``DONE``/``CANCELLED`` only. A streaming client cannot inspect a
+    #: ``TurnResult`` (there is not one), so the two facts the UI needs to
+    #: caption a turn -- which model answered, and whether the answer was
+    #: grounded -- travel on the terminal event.
+    knowledge_chunks: int = 0
+    model: str = ""
 
 
 @dataclass
@@ -445,12 +451,21 @@ class VoicePipeline:
         if first_chunk_s is not None:
             logger.debug("tts first chunk in %.3fs of the turn", first_chunk_s)
 
+        # Caption material for whichever terminal event this turn produces.
+        grounded_chunks = len([s for s in (knowledge or []) if s and s.strip()])
+        model_name = getattr(self.llm, "model", "") or ""
+
         if cancelled:
             LLM_CANCELLED.labels(provider=provider).inc()
             LLM_REQUESTS.labels(provider=provider, status="cancelled").inc()
             TTS_CANCELLED.inc()
             TTS_REQUESTS.labels(status="cancelled").inc()
-            yield PipelineEvent(EventKind.CANCELLED, text="".join(parts))
+            yield PipelineEvent(
+                EventKind.CANCELLED,
+                text="".join(parts),
+                knowledge_chunks=grounded_chunks,
+                model=model_name,
+            )
             return
 
         LLM_REQUESTS.labels(
@@ -459,7 +474,12 @@ class VoicePipeline:
         TTS_REQUESTS.labels(status="ok").inc()
         PIPELINE_REQUESTS.labels(status="ok", llm_provider=provider).inc()
         PIPELINE_LATENCY.observe(time.perf_counter() - started)
-        yield PipelineEvent(EventKind.DONE, text="".join(parts))
+        yield PipelineEvent(
+            EventKind.DONE,
+            text="".join(parts),
+            knowledge_chunks=grounded_chunks,
+            model=model_name,
+        )
 
     # -- internals ----------------------------------------------------------
     def _provider(self) -> str:

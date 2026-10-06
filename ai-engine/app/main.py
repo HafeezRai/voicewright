@@ -22,11 +22,12 @@ import asyncio
 import base64
 import functools
 import io
+import json
 import logging
 import threading
 import time
 from collections import OrderedDict
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator, Iterator, Sequence
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -34,6 +35,7 @@ import grpc
 import soundfile as sf
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from pydantic import BaseModel, Field, ValidationError
 
@@ -52,7 +54,7 @@ from app.agents import (
     DocumentOut,
 )
 from app.agents.store import DEFAULT_ORG_ID
-from app.audio_io import to_wav_bytes
+from app.audio_io import to_pcm16_bytes, to_wav_bytes
 from app.config import get_settings
 from app.grpc.server import start_grpc_server
 from app.knowledge import Retriever, build_embedder, chunk_text
@@ -63,7 +65,8 @@ from app.metrics import (
     KNOWLEDGE_RETRIEVAL_LATENCY,
     KNOWLEDGE_RETRIEVALS,
 )
-from app.pipeline import VoicePipeline, build_pipeline
+from app.pipeline import EventKind, VoicePipeline, build_pipeline
+from app.tts.sink import TTSPlaybackSink
 
 settings = get_settings()
 
@@ -381,6 +384,145 @@ async def run_pipeline(
             to_wav_bytes(result.speech.audio, result.speech.sample_rate)
         ).decode("ascii")
     return payload
+
+
+# ---------------------------------------------------------------------------
+# Streaming turn (SSE)
+#
+# `/pipeline` is a batch call: one JSON body, sent only once the whole reply has
+# been generated *and* synthesised. For a voice agent that is the wrong shape --
+# the caller sits in silence for the entire turn, which is exactly what makes a
+# voice agent feel like a form submission.
+#
+# This endpoint forwards the pipeline's own event stream instead, so audio
+# starts after the first sentence and the transcript and reply appear as they
+# are produced.
+#
+# Server-Sent Events rather than a WebSocket: the flow is strictly one-way for
+# the duration of a single turn, and SSE rides ordinary HTTP, so there is no
+# upgrade handshake to negotiate, no reconnect protocol to invent, and it passes
+# through the same CORS middleware as every other route here.
+# ---------------------------------------------------------------------------
+
+
+def _sse(event: str, data: dict) -> str:
+    """One SSE frame.
+
+    ``json.dumps`` escapes newlines inside strings, so the payload is always a
+    single ``data:`` line and never needs folding.
+    """
+    return f"event: {event}\ndata: {json.dumps(data)}\n\n"
+
+
+@app.post("/pipeline/stream")
+async def stream_pipeline(
+    request: Request,
+    system_prompt: str | None = None,
+    session_id: str | None = None,
+    agent_id: str | None = None,
+) -> StreamingResponse:
+    """Stream one STT -> LLM -> TTS turn as it happens.
+
+    Emits ``transcript``, then ``reply_delta`` per generated token, then
+    ``audio`` frames of base64 PCM16, and finally ``done`` or ``cancelled``
+    (each carrying the full reply, the model, and how many knowledge chunks
+    grounded it). Failures after the stream has opened arrive as an ``error``
+    event, because the status code has already been sent.
+
+    An unknown ``agent_id`` is a 404 *before* any streaming starts, so a client
+    can still tell "no such agent" apart from a mid-turn failure.
+    """
+    body = await request.body()
+    if not body:
+        raise HTTPException(status_code=400, detail="empty request body; send WAV bytes")
+
+    org_id = _resolve_org(request)
+    agent = None
+    if agent_id:
+        agent = agent_store.get_agent(org_id, agent_id)
+        if agent is None:
+            raise HTTPException(status_code=404, detail=f"agent not found: {agent_id}")
+
+    effective_prompt = system_prompt
+    if effective_prompt is None and agent is not None and agent["system_prompt"]:
+        effective_prompt = agent["system_prompt"]
+
+    knowledge_provider = (
+        functools.partial(_knowledge_for, org_id, agent_id) if agent is not None else None
+    )
+    history: Sequence = _sessions.snapshot(session_id)
+
+    try:
+        audio, rate = await _read_wav_bytes(body)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        _raise_unavailable("pipeline", exc)
+
+    def frames() -> Iterator[str]:
+        """Translate pipeline events into SSE frames.
+
+        Starlette iterates a sync generator in its worker threadpool, so the
+        blocking STT/LLM/TTS work stays off the event loop -- the same reason
+        the batch route wraps its call in ``asyncio.to_thread``.
+        """
+        sink = TTSPlaybackSink()
+        transcript_text = ""
+        try:
+            for event in pipeline.stream_turn(
+                audio,
+                rate,
+                sink=sink,
+                system_prompt=effective_prompt,
+                history=history,
+                knowledge_provider=knowledge_provider,
+            ):
+                if event.kind is EventKind.TRANSCRIPT_FINAL:
+                    transcript_text = event.text or ""
+                    yield _sse("transcript", {"text": transcript_text})
+                elif event.kind is EventKind.REPLY_DELTA:
+                    yield _sse("reply_delta", {"text": event.text or ""})
+                elif event.kind is EventKind.AUDIO_CHUNK and event.audio is not None:
+                    yield _sse(
+                        "audio",
+                        {
+                            "sample_rate": event.sample_rate or pipeline.sample_rate,
+                            "pcm16": base64.b64encode(to_pcm16_bytes(event.audio)).decode("ascii"),
+                        },
+                    )
+                elif event.kind in (EventKind.DONE, EventKind.CANCELLED):
+                    _sessions.record(session_id, transcript_text, event.text or "")
+                    yield _sse(
+                        "cancelled" if event.kind is EventKind.CANCELLED else "done",
+                        {
+                            "reply_text": event.text or "",
+                            "model": event.model,
+                            "knowledge_chunks": event.knowledge_chunks,
+                        },
+                    )
+        except GeneratorExit:
+            # The client hung up mid-turn. Cancel the sink so the LLM stream
+            # stops at the next delta instead of decoding into a socket nobody
+            # is reading, then let the generator die.
+            sink.stop()
+            raise
+        except Exception as exc:
+            # Mid-stream there is no status code left to change, so a failure
+            # becomes an event. Swallowing it here is the only way to tell the
+            # client the turn broke instead of just going quiet.
+            logger.exception("streaming turn failed")
+            yield _sse("error", {"detail": str(exc)})
+
+    return StreamingResponse(
+        frames(),
+        media_type="text/event-stream",
+        headers={
+            # Proxies must not buffer this, or every chunk arrives at once at
+            # the end -- which would undo the entire point of the endpoint.
+            "Cache-Control": "no-store",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 # ---------------------------------------------------------------------------
