@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { AiEngineError, type AgentReply, ask, synthesize, transcribe } from "../lib/aiEngine";
-import { PcmCapture, resampleToMonoWav } from "../lib/audio";
+import { MIC_CONSTRAINTS, PcmCapture, resampleToMonoWav } from "../lib/audio";
 import { StatusPill } from "./StatusPill";
 
 interface Turn {
@@ -129,7 +129,7 @@ export function AgentTurnPanel({ onAgentSpeaking }: { onAgentSpeaking?: (speakin
   const startRecording = useCallback(async () => {
     setNotice(null);
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      const stream = await navigator.mediaDevices.getUserMedia(MIC_CONSTRAINTS);
       micRef.current = stream;
       // Raw PCM, not MediaRecorder: see PcmCapture. MediaRecorder's output is a
       // compressed container that has to be decoded back to samples, and Safari

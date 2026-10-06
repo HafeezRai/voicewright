@@ -7,7 +7,7 @@ import {
   runAgentTurn,
   streamAgentTurn,
 } from "../lib/agents";
-import { PcmCapture, resampleToMonoWav } from "../lib/audio";
+import { MIC_CONSTRAINTS, PcmCapture, resampleToMonoWav } from "../lib/audio";
 import { ProgressivePlayer } from "../lib/player";
 import { TurnDetector } from "../lib/vad";
 import { StatusPill } from "./StatusPill";
@@ -215,6 +215,10 @@ export function TalkToAgent({ agent }: { agent: Agent }) {
       } catch (error) {
         ensureRow();
         patch(id, { error: describe(error) });
+      } finally {
+        // No longer in flight: an interruption arriving after this point has
+        // nothing to cancel.
+        if (abortRef.current === controller) abortRef.current = null;
       }
     },
     [agent.id, ensurePlayer, patch, pushResult],
@@ -250,16 +254,9 @@ export function TalkToAgent({ agent }: { agent: Agent }) {
   const startCall = useCallback(async () => {
     setNotice(null);
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          // The agent's own voice comes out of the speakers and straight back
-          // into the mic. Browser AEC is what stops the agent interrupting
-          // itself; it is not perfect, so a headset still sounds better.
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-      });
+      // Echo cancellation and noise suppression are requested here because
+      // without them the agent hears itself and treats room noise as speech.
+      const stream = await navigator.mediaDevices.getUserMedia(MIC_CONSTRAINTS);
       micRef.current = stream;
       inCallRef.current = true;
 
@@ -270,15 +267,22 @@ export function TalkToAgent({ agent }: { agent: Agent }) {
 
       const detector = new TurnDetector({
         onSpeechStart: () => {
-          // Talking over the agent is how you interrupt it. Gated on audio
-          // actually playing, not merely having played -- otherwise the next
-          // utterance would abort a turn that already finished.
-          if (playerRef.current?.isPlaying) {
-            playerRef.current.stop();
-            abortRef.current?.abort();
-          }
-          setCallState("listening");
           beginCapture();
+        },
+        onInterrupt: () => {
+          // Sustained speech over the agent is how you interrupt it.
+          //
+          // Gated on a turn being *in flight*, not on audio already playing.
+          // The agent spends a second or two thinking before its first word,
+          // and during that window `isPlaying` is false -- so gating on
+          // playback meant talking over the thinking was ignored and the agent
+          // then started speaking a reply to a question the caller had already
+          // moved on from.
+          const controller = abortRef.current;
+          if (!controller) return;
+          playerRef.current?.stop();
+          controller.abort();
+          setCallState("listening");
         },
         onUtteranceEnd: () => endCapture(),
         onNoSpeech: () => setNotice("Didn't catch anything — still listening."),
@@ -344,7 +348,7 @@ export function TalkToAgent({ agent }: { agent: Agent }) {
   const startRecording = useCallback(async () => {
     setNotice(null);
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia(MIC_CONSTRAINTS);
       micRef.current = stream;
       // Same raw-PCM capture as call mode, for the same reason: MediaRecorder
       // hands back a container that Safari cannot decode back into samples.
@@ -522,21 +526,38 @@ export function TalkToAgent({ agent }: { agent: Agent }) {
               )}
             </div>
 
+            {/* Whatever was said is shown even when the turn ended badly. The
+                reply is the product of a paid API call and a person's words --
+                replacing it with an error message throws away the only copy. */}
+            {result.reply ? (
+              <p className="mt-1 text-sm text-slate-100">
+                {result.reply}
+                {result.totalMs === null && (
+                  <span className="animate-pulse text-cloudpso-accent">▍</span>
+                )}
+              </p>
+            ) : null}
+
             {result.error ? (
-              <p className="mt-1 text-sm text-cloudpso-err">{result.error}</p>
-            ) : (
-              <>
-                <p className="mt-1 text-sm text-slate-100">
-                  {result.reply}
-                  {result.totalMs === null && <span className="animate-pulse text-cloudpso-accent">▍</span>}
-                </p>
-                <p className="mt-1 font-mono text-[10px] text-cloudpso-muted">
-                  {result.firstAudioMs !== null && <>first audio {result.firstAudioMs}ms · </>}
-                  {result.totalMs !== null && <>turn {result.totalMs}ms</>}
-                  {result.model && <> · {result.model}</>}
-                </p>
-              </>
-            )}
+              <p
+                data-testid="turn-note"
+                // A note, not a replacement. Amber when there is still a reply
+                // above it to read, red when the turn produced nothing.
+                className={`mt-1 text-[11px] ${
+                  result.reply ? "text-cloudpso-warn" : "text-cloudpso-err"
+                }`}
+              >
+                {result.error}
+              </p>
+            ) : null}
+
+            {!result.error && (result.firstAudioMs !== null || result.model) ? (
+              <p className="mt-1 font-mono text-[10px] text-cloudpso-muted">
+                {result.firstAudioMs !== null && <>first audio {result.firstAudioMs}ms · </>}
+                {result.totalMs !== null && <>turn {result.totalMs}ms</>}
+                {result.model && <> · {result.model}</>}
+              </p>
+            ) : null}
           </li>
         ))}
       </ul>

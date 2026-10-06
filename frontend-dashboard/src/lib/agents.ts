@@ -272,6 +272,10 @@ export async function streamAgentTurn(
 
   const decoder = new TextDecoder();
   let buffer = "";
+  // Everything received so far. If the caller interrupts mid-reply the stream
+  // is aborted from this side, so the server's terminal event never arrives --
+  // this is the only record of what was actually generated.
+  let streamed = "";
 
   const handle = (frame: string): boolean => {
     const parsed = parseFrame(frame);
@@ -286,9 +290,12 @@ export async function streamAgentTurn(
       case "transcript":
         callbacks.onTranscript?.(String(data.text ?? ""));
         return false;
-      case "reply_delta":
-        callbacks.onDelta?.(String(data.text ?? ""));
+      case "reply_delta": {
+        const text = String(data.text ?? "");
+        streamed += text;
+        callbacks.onDelta?.(text);
         return false;
+      }
       case "audio": {
         const sampleRate = Number(data.sample_rate ?? 0);
         const pcm16 = decodePcm16(String(data.pcm16 ?? ""));
@@ -331,6 +338,15 @@ export async function streamAgentTurn(
       }
     }
     if (buffer.trim()) handle(buffer);
+  } catch (error) {
+    // An abort is the caller interrupting, not a failure. Reporting it as a
+    // cancellation — carrying the partial reply — is what stops the turn being
+    // replaced by an error message and the generated text disappearing.
+    if ((error as Error)?.name === "AbortError") {
+      callbacks.onCancelled?.({ replyText: streamed, model: "", knowledgeChunks: 0 });
+      return;
+    }
+    throw error;
   } finally {
     reader.releaseLock();
   }

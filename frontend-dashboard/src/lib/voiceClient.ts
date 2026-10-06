@@ -32,6 +32,7 @@
 
 import type { IceState, VoiceEvent } from "../state/voiceMachine";
 import { config } from "../config";
+import { MIC_CONSTRAINTS } from "./audio";
 
 export interface VoiceClientDeps {
   getUserMedia(constraints: MediaStreamConstraints): Promise<MediaStream>;
@@ -108,7 +109,9 @@ export class VoiceClient {
     // 1. Microphone first: a permission failure should fail before any socket.
     let stream: MediaStream;
     try {
-      stream = await this.deps.getUserMedia({ audio: true, video: false });
+      // Same constraints as the rest of the app: without echo cancellation the
+      // agent hears itself, and without noise suppression a fan registers as speech.
+      stream = await this.deps.getUserMedia(MIC_CONSTRAINTS);
     } catch (error) {
       this.active = false;
       this.dispatch({ type: "mic-denied", error: describeError(error) });

@@ -67,6 +67,24 @@ export async function blobToMonoWav(blob: Blob, targetRate = 16000): Promise<Blo
   return encodeWav(rendered.getChannelData(0), targetRate);
 }
 
+/**
+ * Microphone constraints, used everywhere we capture.
+ *
+ * These are not optional polish. `echoCancellation` is what stops the agent
+ * hearing its own voice through the speakers and interrupting itself, and
+ * `noiseSuppression` is what stops a fan or a keyboard from registering as
+ * speech. A bare `getUserMedia({audio: true})` turns both off, and the browser
+ * will happily hand back a stream that makes the agent look broken.
+ */
+export const MIC_CONSTRAINTS: MediaStreamConstraints = {
+  audio: {
+    echoCancellation: true,
+    noiseSuppression: true,
+    autoGainControl: true,
+  },
+  video: false,
+};
+
 /** Pick a MediaRecorder mime type the current browser actually supports. */
 export function pickRecorderMimeType(): string | undefined {
   const candidates = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus"];

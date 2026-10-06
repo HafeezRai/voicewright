@@ -224,6 +224,52 @@ describe("streamAgentTurn", () => {
     await expect(streamAgentTurn("nope", wav())).rejects.toThrow("agent not found: nope");
   });
 
+  it("reports an aborted stream as a cancellation carrying the partial reply", async () => {
+    // Interrupting aborts the fetch from this side, so the server's terminal
+    // event never arrives. The text received so far is the only copy -- losing
+    // it is what made the reply appear to be deleted mid-sentence.
+    const bytes = new TextEncoder().encode(
+      sse("transcript", { text: "how do i book" }) + sse("reply_delta", { text: "Sure, let me" }),
+    );
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(bytes);
+        // Erroring discards anything still queued, so let the consumer read the
+        // frame first and abort on the next turn of the loop.
+        setTimeout(() => controller.error(Object.assign(new Error("aborted"), { name: "AbortError" })), 0);
+      },
+    });
+    vi.stubGlobal("fetch", () => Promise.resolve(new Response(body, { status: 200 })));
+
+    const deltas: string[] = [];
+    const seen: { cancelled: { replyText: string } | null; done: boolean } = {
+      cancelled: null,
+      done: false,
+    };
+
+    await expect(
+      streamAgentTurn("a1", wav(), {
+        onDelta: (t) => deltas.push(t),
+        onDone: () => (seen.done = true),
+        onCancelled: (r) => (seen.cancelled = r),
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(deltas.join("")).toBe("Sure, let me");
+    expect(seen.cancelled?.replyText).toBe("Sure, let me");
+    expect(seen.done).toBe(false);
+  });
+
+  it("still throws on a genuine mid-stream failure", async () => {
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.error(new Error("connection reset"));
+      },
+    });
+    vi.stubGlobal("fetch", () => Promise.resolve(new Response(body, { status: 200 })));
+    await expect(streamAgentTurn("a1", wav())).rejects.toThrow("connection reset");
+  });
+
   it("accepts a stream with no terminal frame at all", async () => {
     vi.stubGlobal("fetch", () =>
       Promise.resolve(sseResponse([sse("reply_delta", { text: "cut off" })])),

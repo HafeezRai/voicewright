@@ -132,6 +132,11 @@ export class TurnStateMachine {
     return this.phase;
   }
 
+  /** Milliseconds of speech accumulated in the current utterance. */
+  get speechMs(): number {
+    return this.speechAccum;
+  }
+
   /**
    * Feed one RMS sample. Returns an event when that sample decided something.
    *
@@ -199,8 +204,20 @@ export class TurnStateMachine {
 // ---------------------------------------------------------------------------
 
 export interface TurnDetectorOptions extends TurnStateMachineOptions {
-  /** Called when the caller starts speaking — use it to cut off playback. */
+  /** Fires on the first frame above threshold. Use it to start capturing. */
   onSpeechStart?: () => void;
+  /**
+   * Fires once the caller has been speaking for `interruptAfterMs` without a
+   * gap. Use it to cut off playback — *not* `onSpeechStart`.
+   *
+   * Interrupting on the first loud frame means a door slam, a cough, or the
+   * agent's own voice leaking through the speakers all cut it off mid-word.
+   * Requiring a short run of continuous speech is the cheapest thing that
+   * distinguishes "someone is talking to me" from "something was loud".
+   */
+  onInterrupt?: () => void;
+  /** Sustained speech needed before `onInterrupt` fires. */
+  interruptAfterMs?: number;
   /** Called once, when the caller has finished their turn. */
   onUtteranceEnd: (event: TurnEvent) => void;
   onNoSpeech?: () => void;
@@ -236,6 +253,7 @@ export class TurnDetector {
   private readonly tracker = new NoiseFloorTracker();
   private started = false;
   private stopped = false;
+  private interrupted = false;
 
   constructor(private readonly options: TurnDetectorOptions) {
     this.machine = new TurnStateMachine(options);
@@ -257,6 +275,7 @@ export class TurnDetector {
 
     this.stopped = false;
     this.started = false;
+    this.interrupted = false;
     this.timer = setInterval(() => this.tick(), TICK_MS);
   }
 
@@ -291,9 +310,22 @@ export class TurnDetector {
 
     const event = this.machine.push(rms, now);
     this.options.onLevel?.(rms, this.machine.currentPhase === "speech" ? "speech" : "waiting");
+
+    // Sustained speech, checked every frame rather than only on transitions.
+    const interruptAfter = this.options.interruptAfterMs ?? 150;
+    if (
+      !this.interrupted &&
+      this.machine.currentPhase === "speech" &&
+      this.machine.speechMs >= interruptAfter
+    ) {
+      this.interrupted = true;
+      this.options.onInterrupt?.();
+    }
+
     if (!event) return;
 
     if (event.type === "speech_start") {
+      this.interrupted = false;
       this.options.onSpeechStart?.();
       return;
     }
@@ -304,6 +336,7 @@ export class TurnDetector {
     // pauses to think, the no-speech timer expires, and from then on the agent
     // never hears anything again while still looking attentive.
     this.machine.start(now);
+    this.interrupted = false;
 
     if (event.type === "utterance_end") this.options.onUtteranceEnd(event);
     else this.options.onNoSpeech?.();
