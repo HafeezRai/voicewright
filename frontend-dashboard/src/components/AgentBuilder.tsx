@@ -9,9 +9,9 @@ import {
   listAgents,
   updateAgent,
 } from "../lib/agents";
+import { AGENT_PRESETS } from "../lib/agentPresets";
 import { KnowledgePanel } from "./KnowledgePanel";
 import { StatusPill } from "./StatusPill";
-import { TalkToAgent } from "./TalkToAgent";
 
 /**
  * Which voices the TTS backend actually has loaded.
@@ -52,7 +52,7 @@ function describe(error: unknown): string {
  * is typing into a form, not shipping code, and that is the claim the demo has
  * to make good on.
  */
-export function AgentBuilder() {
+export function AgentBuilder({ onSelect }: { onSelect?: (agent: Agent | null) => void } = {}) {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [form, setForm] = useState<AgentInput>(EMPTY_FORM);
@@ -61,6 +61,13 @@ export function AgentBuilder() {
   const [error, setError] = useState<string | null>(null);
 
   const selected = agents.find((agent) => agent.id === selectedId) ?? null;
+
+  useEffect(() => {
+    onSelect?.(selected);
+    // `onSelect` is intentionally not a dependency: it is a render callback, and
+    // depending on it would re-fire on every parent render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected]);
 
   const refresh = useCallback(async (signal?: AbortSignal) => {
     try {
@@ -112,6 +119,21 @@ export function AgentBuilder() {
     }
   }, [editingId, form, refresh, resetForm]);
 
+  /** Fill the form from a preset, so the first step is talking, not writing. */
+  const applyPreset = useCallback((presetId: string) => {
+    const preset = AGENT_PRESETS.find((entry) => entry.id === presetId);
+    if (!preset) return;
+    setEditingId(null);
+    setForm({
+      name: preset.label,
+      role: preset.role,
+      system_prompt: preset.systemPrompt,
+      voice: WIRED_VOICE,
+      language: "en",
+      greeting: preset.greeting,
+    });
+  }, []);
+
   const onEdit = useCallback((agent: Agent) => {
     setEditingId(agent.id);
     setForm({
@@ -154,6 +176,28 @@ export function AgentBuilder() {
             A role, a prompt, a voice and some knowledge — that is the whole agent.
           </p>
         </header>
+
+        {!editingId ? (
+          <div className="mb-4">
+            <p className="mb-1.5 text-[10px] uppercase tracking-wide text-cloudpso-muted">
+              Start from an example
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {AGENT_PRESETS.map((preset) => (
+                <button
+                  key={preset.id}
+                  type="button"
+                  title={preset.blurb}
+                  data-testid={`preset-${preset.id}`}
+                  onClick={() => applyPreset(preset.id)}
+                  className="rounded-full border border-cloudpso-line px-2.5 py-1 text-[11px] text-cloudpso-muted transition hover:border-cloudpso-accent/60 hover:text-slate-100"
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="flex flex-col gap-1 text-[11px] text-cloudpso-muted">
@@ -225,6 +269,17 @@ export function AgentBuilder() {
             </span>
           </label>
         </div>
+
+        <label className="mt-3 flex flex-col gap-1 text-[11px] text-cloudpso-muted">
+          Greeting — spoken before the caller says anything (optional)
+          <input
+            value={form.greeting}
+            onChange={(event) => set("greeting", event.target.value)}
+            placeholder="Hello! How may I help you today?"
+            data-testid="agent-greeting"
+            className="rounded-lg border border-cloudpso-line bg-cloudpso-panel2 px-3 py-1.5 text-sm text-slate-100 outline-none focus:border-cloudpso-accent"
+          />
+        </label>
 
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <button
@@ -308,19 +363,8 @@ export function AgentBuilder() {
         )}
       </section>
 
-      {/* ---- selected agent: knowledge + talk ---- */}
-      {selected ? (
-        <>
-          <KnowledgePanel agent={selected} />
-          <TalkToAgent agent={selected} />
-        </>
-      ) : (
-        <section className="rounded-xl border border-dashed border-cloudpso-line p-6 text-center">
-          <p className="text-sm text-cloudpso-muted">
-            Select an agent above to attach knowledge and talk to it.
-          </p>
-        </section>
-      )}
+      {/* Per-agent knowledge: still settings, still the sidebar. */}
+      {selected ? <KnowledgePanel agent={selected} /> : null}
     </div>
   );
 }

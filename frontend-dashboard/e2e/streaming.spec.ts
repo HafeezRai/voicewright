@@ -46,16 +46,19 @@ test("a call answers on its own, with no stop or send button", async ({ page }) 
   await expect(page.getByTestId("record-button")).toHaveCount(0);
 
   await page.getByTestId("call-button").click();
-  await expect(page.getByTestId("call-button")).toHaveText("End call");
+  await expect(page.getByTestId("call-button")).toHaveText(/Stop listening/);
   await expect(page.getByTestId("call-status")).toContainText(/Listening|Speaking/);
 
   // From here on the page is never touched. A completed turn can only appear if
   // silence detection ended the caller's turn by itself.
-  const row = page.getByTestId("talk-to-agent").locator("li").first();
-  await expect(row).toContainText("first audio", { timeout: 90_000 });
-  await expect(row).toContainText(/grounded/);
-  await expect(page.getByTestId("call-button")).toHaveText("End call");
+  await expect(page.getByTestId("turn-transcript")).toBeVisible({ timeout: 90_000 });
+  const caption = page.getByTestId("transcript").locator("p").filter({ hasText: "first audio" });
+  await expect(caption.first()).toBeVisible({ timeout: 90_000 });
+  // Captioned with its grounding state. This agent has no documents, so
+  // "ungrounded" is the *correct* caption -- the check is that it exists.
+  await expect(caption.first()).toContainText(/grounded/);
+  await expect(page.getByTestId("call-button")).toHaveText(/Stop listening/);
 
   await page.getByTestId("call-button").click();
-  await expect(page.getByTestId("call-button")).toHaveText("Start call");
+  await expect(page.getByTestId("call-button")).toHaveText(/Start listening/);
 });

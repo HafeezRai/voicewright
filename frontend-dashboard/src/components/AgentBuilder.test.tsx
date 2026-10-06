@@ -96,7 +96,7 @@ describe("AgentBuilder", () => {
     expect(calls.some((call) => call.method === "POST")).toBe(false);
   });
 
-  it("reveals the knowledge base and talk panels once an agent is selected", async () => {
+  it("reveals the knowledge base once an agent is selected", async () => {
     stubApi([AGENT]);
     const user = userEvent.setup();
     render(<AgentBuilder />);
@@ -104,9 +104,36 @@ describe("AgentBuilder", () => {
     await user.click(await screen.findByText("Downtown clinic"));
 
     expect(await screen.findByTestId("knowledge-panel")).toBeInTheDocument();
-    expect(screen.getByTestId("talk-to-agent")).toBeInTheDocument();
     // No documents attached yet -> the agent is ungrounded, and the UI says so.
     expect(screen.getByTestId("knowledge-count")).toHaveTextContent(/ungrounded/i);
+  });
+
+  it("reports the selected agent upward so the console can render it", async () => {
+    stubApi([AGENT]);
+    const onSelect = vi.fn();
+    const user = userEvent.setup();
+    render(<AgentBuilder onSelect={onSelect} />);
+
+    await user.click(await screen.findByText("Downtown clinic"));
+    await waitFor(() => expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: "a1" })));
+  });
+
+  it("fills the form from an example preset", async () => {
+    stubApi([]);
+    const user = userEvent.setup();
+    render(<AgentBuilder />);
+    await screen.findByText(/No agents yet/i);
+
+    await user.click(screen.getByTestId("preset-clinic"));
+
+    // Prefilled, so the first step is talking rather than writing a prompt.
+    expect(screen.getByTestId("agent-name")).toHaveValue("Clinic reception");
+    expect(screen.getByTestId("agent-greeting")).toHaveValue(
+      "Thanks for calling the clinic. How can I help?",
+    );
+    expect((screen.getByTestId("agent-prompt") as HTMLTextAreaElement).value).toMatch(
+      /clinic receptionist/i,
+    );
   });
 
   it("only offers a voice the TTS backend actually ships", async () => {

@@ -7,11 +7,14 @@ import {
   runAgentTurn,
   streamAgentTurn,
 } from "../lib/agents";
+import { synthesize } from "../lib/aiEngine";
 import { MIC_CONSTRAINTS, PcmCapture, resampleToMonoWav } from "../lib/audio";
+import { type ConversationTurn as Result, emptyTurn } from "../lib/conversation";
 import { looksLikeEcho } from "../lib/echo";
 import { ProgressivePlayer } from "../lib/player";
 import { TurnDetector } from "../lib/vad";
 import { StatusPill } from "./StatusPill";
+import { Transcript } from "./Transcript";
 
 /**
  * How the caller talks to the agent.
@@ -26,17 +29,6 @@ type Mode = "call" | "batch";
 /** Where a live call currently is. */
 type CallState = "off" | "listening" | "thinking" | "speaking";
 
-interface Result {
-  id: number;
-  transcript: string;
-  /** Grows token by token while streaming. */
-  reply: string;
-  knowledgeChunks: number;
-  model: string;
-  firstAudioMs: number | null;
-  totalMs: number | null;
-  error?: string;
-}
 
 function describe(error: unknown): string {
   if (error instanceof AgentApiError) return error.message;
@@ -63,7 +55,7 @@ export function TalkToAgent({ agent }: { agent: Agent }) {
   const [callState, setCallState] = useState<CallState>("off");
   const [recording, setRecording] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [results, setResults] = useState<Result[]>([]);
+  const [turns, setTurns] = useState<Result[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
   const [level, setLevel] = useState<{ rms: number; phase: string }>({ rms: 0, phase: "idle" });
   //: What the browser actually granted, which is not always what was asked for.
@@ -88,11 +80,11 @@ export function TalkToAgent({ agent }: { agent: Agent }) {
   });
 
   const patch = useCallback((id: number, update: Partial<Result>) => {
-    setResults((prev) => prev.map((row) => (row.id === id ? { ...row, ...update } : row)));
+    setTurns((prev) => prev.map((row) => (row.id === id ? { ...row, ...update } : row)));
   }, []);
 
   const pushResult = useCallback((row: Result) => {
-    setResults((prev) => [row, ...prev].slice(0, 6));
+    setTurns((prev) => [row, ...prev].slice(0, 6));
   }, []);
 
   /** Stop every source of sound and input. Safe to call repeatedly. */
@@ -136,15 +128,7 @@ export function TalkToAgent({ agent }: { agent: Agent }) {
     async (wav: Blob, announce: boolean): Promise<void> => {
       const id = nextId.current++;
       if (announce) {
-        pushResult({
-          id,
-          transcript: "…",
-          reply: "",
-          knowledgeChunks: 0,
-          model: "",
-          firstAudioMs: null,
-          totalMs: null,
-        });
+        pushResult(emptyTurn(id));
       }
 
       const player = ensurePlayer();
@@ -161,15 +145,7 @@ export function TalkToAgent({ agent }: { agent: Agent }) {
       const ensureRow = () => {
         if (rowCreated) return;
         rowCreated = true;
-        pushResult({
-          id,
-          transcript: "",
-          reply: "",
-          knowledgeChunks: 0,
-          model: "",
-          firstAudioMs: null,
-          totalMs: null,
-        });
+        pushResult(emptyTurn(id));
       };
 
       try {
@@ -187,6 +163,7 @@ export function TalkToAgent({ agent }: { agent: Agent }) {
                   transcript: text,
                   reply: "",
                   error: "ignored — that was my own voice coming back through the mic",
+                  rejectedAsEcho: true,
                   totalMs: Math.round(performance.now() - t0),
                 });
                 controller.abort();
@@ -257,6 +234,37 @@ export function TalkToAgent({ agent }: { agent: Agent }) {
       }
     },
     [agent.id, ensurePlayer, patch, pushResult],
+  );
+
+  /**
+   * Speak the agent's greeting before the caller says anything.
+   *
+   * This is what makes it feel like answering a phone rather than operating a
+   * tool: the agent opens the conversation, so the caller only has to respond.
+   * A greeting that fails to synthesise is not worth failing a call over.
+   */
+  const speakGreeting = useCallback(
+    async (text: string) => {
+      agentSpeechRef.current = { text, endedAt: null };
+      setCallState("speaking");
+      try {
+        const wav = await synthesize(text);
+        const url = URL.createObjectURL(wav);
+        if (audioRef.current?.src) URL.revokeObjectURL(audioRef.current.src);
+        const audio = new Audio(url);
+        audioRef.current = audio;
+        audio.onended = () => {
+          // Closes the echo window: after this, matching words are the caller's.
+          agentSpeechRef.current = { text, endedAt: performance.now() };
+          if (inCallRef.current) setCallState("listening");
+        };
+        await audio.play().catch(() => undefined);
+      } catch {
+        agentSpeechRef.current = { text, endedAt: performance.now() };
+        if (inCallRef.current) setCallState("listening");
+      }
+    },
+    [],
   );
 
   /** Mark the start of an utterance; anything captured before it is dropped. */
@@ -344,11 +352,12 @@ export function TalkToAgent({ agent }: { agent: Agent }) {
       await detector.start(stream);
 
       setCallState("listening");
+      if (agent.greeting.trim()) void speakGreeting(agent.greeting.trim());
     } catch (error) {
       setNotice(`Microphone unavailable: ${describe(error)}`);
       teardown();
     }
-  }, [beginCapture, endCapture, ensurePlayer, teardown]);
+  }, [agent.greeting, beginCapture, endCapture, ensurePlayer, speakGreeting, teardown]);
 
   // --- push-to-talk (batch mode) -------------------------------------------
 
@@ -367,15 +376,7 @@ export function TalkToAgent({ agent }: { agent: Agent }) {
     async (wav: Blob) => {
       const id = nextId.current++;
       const t0 = performance.now();
-      pushResult({
-        id,
-        transcript: "…",
-        reply: "",
-        knowledgeChunks: 0,
-        model: "",
-        firstAudioMs: null,
-        totalMs: null,
-      });
+      pushResult(emptyTurn(id));
       try {
         const turn: AgentTurn = await runAgentTurn(agent.id, wav);
         const elapsed = Math.round(performance.now() - t0);
@@ -438,204 +439,193 @@ export function TalkToAgent({ agent }: { agent: Agent }) {
 
   const inCall = callState !== "off";
 
+  // Last completed turn, for the footer readout.
+  const lastDone = turns.find((turn) => turn.totalMs !== null);
+  const stats = lastDone
+    ? `last turn ${lastDone.totalMs}ms · first audio ${lastDone.firstAudioMs ?? "—"}ms${
+        lastDone.model ? ` · ${lastDone.model}` : ""
+      }`
+    : null;
+
   return (
-    <section className="rounded-xl border border-cloudpso-line bg-cloudpso-panel p-4" data-testid="talk-to-agent">
-      <header className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h3 className="text-sm font-semibold">Talk to this agent</h3>
-          <p className="text-[11px] text-cloudpso-muted">
-            Grounded by this agent's knowledge. In call mode it answers when you stop talking.
-          </p>
-        </div>
-        <StatusPill
-          label={mode === "call" ? CALL_LABELS[callState] : recording ? "Recording…" : busy ? "Thinking…" : "Idle"}
-          tone={
-            callState === "speaking" || recording
-              ? "err"
-              : callState === "thinking" || busy
-                ? "warn"
-                : callState === "listening"
-                  ? "ok"
-                  : "idle"
-          }
-          pulse={callState === "listening" || callState === "thinking" || recording || busy}
-          testId="call-status"
-        />
-      </header>
-
-      <div className="mb-3 flex flex-wrap items-center gap-2" role="radiogroup" aria-label="Conversation mode">
-        {(
-          [
-            { id: "call", label: "Live call", hint: "hands-free; answers when you stop talking" },
-            { id: "batch", label: "Push to talk", hint: "record a clip, wait for the full reply" },
-          ] as const
-        ).map((option) => (
-          <button
-            key={option.id}
-            type="button"
-            role="radio"
-            aria-checked={mode === option.id}
-            title={option.hint}
-            data-testid={`mode-${option.id}`}
-            disabled={inCall}
-            onClick={() => setMode(option.id)}
-            className={`rounded-full border px-3 py-1 text-[11px] font-medium transition disabled:opacity-40 ${
-              mode === option.id
-                ? "border-cloudpso-accent/60 bg-cloudpso-accent/15 text-cloudpso-accent"
-                : "border-cloudpso-line text-cloudpso-muted hover:text-slate-100"
-            }`}
-          >
-            {option.label}
-          </button>
-        ))}
-      </div>
-
-      <div className="flex flex-wrap gap-2">
-        {mode === "call" ? (
-          <button
-            type="button"
-            data-testid="call-button"
-            onClick={inCall ? teardown : () => void startCall()}
-            className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
-              inCall
-                ? "bg-cloudpso-err/20 text-cloudpso-err ring-1 ring-cloudpso-err/50"
-                : "bg-cloudpso-accent text-white hover:bg-cloudpso-accent/90"
-            }`}
-          >
-            {inCall ? "End call" : "Start call"}
-          </button>
-        ) : (
-          <button
-            type="button"
-            data-testid="record-button"
-            disabled={busy}
-            onClick={recording ? stopRecording : () => void startRecording()}
-            className={`rounded-lg px-3 py-1.5 text-sm font-medium transition disabled:opacity-50 ${
-              recording
-                ? "bg-cloudpso-err/20 text-cloudpso-err ring-1 ring-cloudpso-err/50"
-                : "bg-cloudpso-accent text-white hover:bg-cloudpso-accent/90"
-            }`}
-          >
-            {recording ? "Stop & send" : "Record question"}
-          </button>
-        )}
-        <button
-          type="button"
-          onClick={() => {
-            playerRef.current?.stop();
-            audioRef.current?.pause();
-            abortRef.current?.abort();
-          }}
-          className="rounded-lg border border-cloudpso-line px-3 py-1.5 text-sm text-cloudpso-muted transition hover:text-slate-100"
-        >
-          Stop speaking
-        </button>
-      </div>
-
-      {inCall && (
-        <div
-          className="mt-3 flex items-center gap-2"
-          data-testid="mic-meter"
-          data-phase={level.phase}
-          data-track={micRef.current?.getAudioTracks()[0]?.readyState ?? "none"}
-        >
-          <span className="w-14 text-[10px] text-cloudpso-muted">mic</span>
-          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-cloudpso-panel2">
-            <div
-              className={`h-full rounded-full transition-[width] duration-75 ${
-                level.phase === "speech" ? "bg-cloudpso-ok" : "bg-cloudpso-muted"
-              }`}
-              // RMS is small even for loud speech (~0.4); scale it so the bar
-              // reads as a level rather than sitting near zero.
-              style={{ width: `${Math.min(100, Math.round(level.rms * 250))}%` }}
-            />
-          </div>
-          <span className="w-20 font-mono text-[10px] text-cloudpso-muted" data-testid="mic-level">
-            {level.phase} {level.rms.toFixed(3)}
-          </span>
-          {processing && (
+    <section
+      className="flex h-full min-h-[560px] flex-col overflow-hidden rounded-2xl border border-cloudpso-line bg-cloudpso-panel"
+      data-testid="talk-to-agent"
+    >
+      {/* ---- status bar ---- */}
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-cloudpso-line px-4 py-3">
+        <div className="flex items-center gap-2">
+          <StatusPill
+            label={
+              mode === "call"
+                ? CALL_LABELS[callState]
+                : recording
+                  ? "Recording…"
+                  : busy
+                    ? "Thinking…"
+                    : "Idle"
+            }
+            tone={
+              callState === "speaking" || recording
+                ? "err"
+                : callState === "thinking" || busy
+                  ? "warn"
+                  : callState === "listening"
+                    ? "ok"
+                    : "idle"
+            }
+            pulse={callState === "listening" || callState === "thinking" || recording || busy}
+            testId="call-status"
+          />
+          {processing ? (
             <span
-              className="font-mono text-[10px] text-cloudpso-muted"
+              className="font-mono text-[10px]"
               data-testid="mic-processing"
               title="Echo cancellation / noise suppression / auto gain, as granted by the browser"
             >
-              {["ec", "ns", "agc"]
-                .map((name, index) => {
-                  const granted = [
-                    processing.echoCancellation,
-                    processing.noiseSuppression,
-                    processing.autoGainControl,
-                  ][index];
-                  return (
-                    <span key={name} className={granted ? "text-cloudpso-ok" : "text-cloudpso-err"}>
-                      {granted ? "✓" : "✗"}
-                      {name}
-                    </span>
-                  );
-                })
-                .reduce<React.ReactNode[]>((acc, node, index) => (index ? [...acc, " ", node] : [node]), [])}
+              {[
+                ["ec", processing.echoCancellation],
+                ["ns", processing.noiseSuppression],
+                ["agc", processing.autoGainControl],
+              ].map(([name, granted], index) => (
+                <span key={String(name)}>
+                  {index > 0 ? " " : null}
+                  <span className={granted ? "text-cloudpso-ok" : "text-cloudpso-err"}>
+                    {granted ? "✓" : "✗"}
+                    {name}
+                  </span>
+                </span>
+              ))}
             </span>
-          )}
+          ) : null}
         </div>
-      )}
 
-      {notice && <p className="mt-2 text-[11px] text-cloudpso-warn">{notice}</p>}
+        <div className="flex items-center gap-1" role="radiogroup" aria-label="Conversation mode">
+          {(
+            [
+              { id: "call", label: "Live call", hint: "hands-free; answers when you stop talking" },
+              { id: "batch", label: "Push to talk", hint: "record a clip, wait for the full reply" },
+            ] as const
+          ).map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              role="radio"
+              aria-checked={mode === option.id}
+              title={option.hint}
+              data-testid={`mode-${option.id}`}
+              disabled={inCall}
+              onClick={() => setMode(option.id)}
+              className={`rounded-full px-2.5 py-1 text-[11px] transition disabled:opacity-40 ${
+                mode === option.id
+                  ? "bg-cloudpso-accent/15 text-cloudpso-accent"
+                  : "text-cloudpso-muted hover:text-slate-100"
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </header>
 
-      <ul className="mt-3 flex flex-col gap-2">
-        {results.map((result) => (
-          <li key={result.id} className="rounded-lg border border-cloudpso-line bg-cloudpso-panel2 p-3">
-            <div className="flex flex-wrap items-start justify-between gap-2">
-              <p className="text-[11px] text-cloudpso-muted">Heard: {result.transcript}</p>
-              {!result.error && (
-                <div className="flex flex-wrap items-center gap-2">
-                  <StatusPill
-                    label={
-                      result.knowledgeChunks > 0
-                        ? `grounded · ${result.knowledgeChunks} chunk${result.knowledgeChunks === 1 ? "" : "s"}`
-                        : "not grounded"
-                    }
-                    tone={result.knowledgeChunks > 0 ? "ok" : "warn"}
-                  />
-                  <StatusPill label={mode === "call" ? "live" : "batch"} tone={mode === "call" ? "info" : "idle"} />
-                </div>
-              )}
+      {/* ---- the conversation ---- */}
+      <div className="min-h-0 flex-1">
+        <Transcript
+          turns={turns}
+          greeting={agent.greeting || undefined}
+          live={inCall}
+          emptyHint={
+            mode === "call" ? (
+              <div className="flex flex-col items-center gap-1.5">
+                <p>Press start and just talk — the agent replies when you stop.</p>
+              </div>
+            ) : (
+              <p>Record a clip, then wait for the reply.</p>
+            )
+          }
+        />
+      </div>
+
+      {/* ---- talk control ---- */}
+      <footer className="border-t border-cloudpso-line px-4 py-3">
+        {notice ? <p className="mb-2 text-[11px] text-cloudpso-warn">{notice}</p> : null}
+
+        <div className="flex items-center gap-3">
+          {mode === "call" ? (
+            <button
+              type="button"
+              data-testid="call-button"
+              onClick={inCall ? teardown : () => void startCall()}
+              className={`flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-medium transition ${
+                inCall
+                  ? "bg-cloudpso-err/20 text-cloudpso-err ring-1 ring-cloudpso-err/50"
+                  : "bg-cloudpso-accent text-white hover:bg-cloudpso-accent/90"
+              }`}
+            >
+              <span
+                className={`h-2.5 w-2.5 rounded-full ${
+                  inCall ? "bg-cloudpso-err" : "bg-white"
+                } ${callState === "listening" ? "animate-pulse-ring" : ""}`}
+              />
+              {inCall ? "Stop listening" : "Start listening"}
+            </button>
+          ) : (
+            <button
+              type="button"
+              data-testid="record-button"
+              disabled={busy}
+              onClick={recording ? stopRecording : () => void startRecording()}
+              className={`flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-medium transition disabled:opacity-50 ${
+                recording
+                  ? "bg-cloudpso-err/20 text-cloudpso-err ring-1 ring-cloudpso-err/50"
+                  : "bg-cloudpso-accent text-white hover:bg-cloudpso-accent/90"
+              }`}
+            >
+              <span className="h-2.5 w-2.5 rounded-full bg-white" />
+              {recording ? "Stop & send" : "Record question"}
+            </button>
+          )}
+
+          {/* Live level, so a muted mic cannot be mistaken for a dead agent. */}
+          {inCall ? (
+            <div className="flex flex-1 items-center gap-2" data-testid="mic-meter">
+              <span className="w-7 text-[10px] text-cloudpso-muted">mic</span>
+              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-cloudpso-panel2">
+                <div
+                  className={`h-full rounded-full transition-[width] duration-75 ${
+                    level.phase === "speech" ? "bg-cloudpso-ok" : "bg-cloudpso-muted/50"
+                  }`}
+                  style={{ width: `${Math.min(100, Math.round(level.rms * 250))}%` }}
+                />
+              </div>
             </div>
+          ) : (
+            <p className="flex-1 text-[11px] text-cloudpso-muted">
+              {mode === "call"
+                ? "The agent answers when you stop speaking. Talk over it to interrupt."
+                : "Record a clip and wait for the full reply."}
+            </p>
+          )}
 
-            {/* Whatever was said is shown even when the turn ended badly. The
-                reply is the product of a paid API call and a person's words --
-                replacing it with an error message throws away the only copy. */}
-            {result.reply ? (
-              <p className="mt-1 text-sm text-slate-100">
-                {result.reply}
-                {result.totalMs === null && (
-                  <span className="animate-pulse text-cloudpso-accent">▍</span>
-                )}
-              </p>
-            ) : null}
+          <button
+            type="button"
+            onClick={() => {
+              playerRef.current?.stop();
+              audioRef.current?.pause();
+              abortRef.current?.abort();
+            }}
+            className="text-[11px] text-cloudpso-muted transition hover:text-slate-100"
+          >
+            Stop speaking
+          </button>
+        </div>
 
-            {result.error ? (
-              <p
-                data-testid="turn-note"
-                // A note, not a replacement. Amber when there is still a reply
-                // above it to read, red when the turn produced nothing.
-                className={`mt-1 text-[11px] ${
-                  result.reply ? "text-cloudpso-warn" : "text-cloudpso-err"
-                }`}
-              >
-                {result.error}
-              </p>
-            ) : null}
-
-            {!result.error && (result.firstAudioMs !== null || result.model) ? (
-              <p className="mt-1 font-mono text-[10px] text-cloudpso-muted">
-                {result.firstAudioMs !== null && <>first audio {result.firstAudioMs}ms · </>}
-                {result.totalMs !== null && <>turn {result.totalMs}ms</>}
-                {result.model && <> · {result.model}</>}
-              </p>
-            ) : null}
-          </li>
-        ))}
-      </ul>
+        {stats ? (
+          <p className="mt-2 font-mono text-[10px] text-cloudpso-muted" data-testid="call-stats">
+            {stats}
+          </p>
+        ) : null}
+      </footer>
     </section>
   );
 }

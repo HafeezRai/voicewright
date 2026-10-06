@@ -122,6 +122,8 @@ describe("App — observability dashboard", () => {
     stubFetch((url) => ({ ok: true, text: url.includes(":8001") ? aiEngineFixture : backendFixture }));
 
     render(<App />);
+    // Observability moved to its own tab when the console became the default view.
+    await userEvent.setup().click(screen.getByTestId("tab-session"));
 
     await waitFor(() => expect(screen.getAllByTestId("svc-online")).toHaveLength(2));
     expect(screen.getByTestId("tile-active-sessions")).toHaveTextContent("1");
@@ -136,10 +138,11 @@ describe("App — observability dashboard", () => {
     stubFetch(() => ({ ok: false, status: 502 }));
 
     render(<App />);
+    await userEvent.setup().click(screen.getByTestId("tab-session"));
 
     await waitFor(() => expect(screen.getAllByTestId("svc-offline")).toHaveLength(2));
     // The page is still fully rendered.
-    expect(screen.getByText("CloudPSO Voice Agent")).toBeInTheDocument();
+    expect(screen.getByText("CloudPSO")).toBeInTheDocument();
     expect(screen.getByTestId("dashboard")).toBeInTheDocument();
   });
 });
