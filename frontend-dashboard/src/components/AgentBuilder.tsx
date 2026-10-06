@@ -39,6 +39,7 @@ const EMPTY_FORM: AgentInput = {
   language: "en",
   greeting: "",
   model: "",
+  provider: "",
   tools: [],
 };
 
@@ -100,11 +101,17 @@ export function AgentBuilder({ onSelect }: { onSelect?: (agent: Agent | null) =>
 
   // The failure this guards against is silent: an agent with tools on a model
   // that cannot call them looks configured and simply never does anything.
+  // The failure this guards against is silent: an agent with tools on a model
+  // that cannot call them looks configured and simply never does anything.
+  const activeOption = catalogue
+    ? (catalogue.options.find(
+        (option) => option.model === (form.model || catalogue.default.model) &&
+          option.provider === (form.provider || catalogue.default.provider),
+      ) ?? catalogue.options.find((option) => option.model === form.model))
+    : undefined;
   const toolWarning =
-    chosenTools.length > 0 && catalogue
-      ? (form.model || catalogue.default) && !catalogue.tool_capable.includes(form.model || catalogue.default)
-        ? `\`${form.model || catalogue.default}\` cannot call tools — it will answer without using them. Pick a tool-capable model.`
-        : null
+    chosenTools.length > 0 && activeOption && !activeOption.tools
+      ? `\`${activeOption.model}\` cannot call tools — it will answer without using them. Pick a model marked “tools”.`
       : null;
 
   const toggleTool = useCallback((name: string) => {
@@ -173,6 +180,7 @@ export function AgentBuilder({ onSelect }: { onSelect?: (agent: Agent | null) =>
       language: agent.language || "en",
       greeting: agent.greeting,
       model: agent.model || "",
+      provider: agent.provider || "",
       tools: (agent.tools ?? []).map((entry) => ({ name: entry.name })),
     });
   }, []);
@@ -316,20 +324,29 @@ export function AgentBuilder({ onSelect }: { onSelect?: (agent: Agent | null) =>
           <label className="flex flex-col gap-1 text-[11px] text-cloudpso-muted">
             Model
             <select
-              value={form.model}
-              onChange={(event) => set("model", event.target.value)}
+              value={form.model ? `${form.provider || "ollama"}:${form.model}` : ""}
+              onChange={(event) => {
+                const [provider, ...rest] = event.target.value.split(":");
+                setForm((prev) => ({
+                  ...prev,
+                  provider: event.target.value ? provider : "",
+                  model: rest.join(":"),
+                }));
+              }}
               data-testid="agent-model"
               className="rounded-lg border border-cloudpso-line bg-cloudpso-panel2 px-3 py-1.5 text-sm text-slate-100 outline-none focus:border-cloudpso-accent"
             >
               <option value="">
-                Service default{catalogue ? ` (${catalogue.default})` : ""}
+                Service default
+                {catalogue ? ` (${catalogue.default.provider}/${catalogue.default.model})` : ""}
               </option>
-              {(catalogue?.models ?? []).map((model) => (
-                <option key={model} value={model}>
-                  {model}
-                  {catalogue?.tool_capable.includes(model)
-                    ? " — tools"
-                    : " — no tool support"}
+              {(catalogue?.options ?? []).map((option) => (
+                <option
+                  key={`${option.provider}:${option.model}`}
+                  value={`${option.provider}:${option.model}`}
+                >
+                  {option.provider} · {option.model}
+                  {option.tools ? " — tools" : " — no tools"}
                 </option>
               ))}
             </select>

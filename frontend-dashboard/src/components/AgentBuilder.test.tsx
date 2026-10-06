@@ -24,9 +24,12 @@ function stubApi(initial: unknown[] = []) {
       return Promise.resolve(
         new Response(
           JSON.stringify({
-            default: "llama3:8b",
-            models: ["llama3:8b", "qwen3.5:0.8b"],
-            tool_capable: ["qwen3.5:0.8b"],
+            default: { provider: "ollama", model: "llama3:8b" },
+            options: [
+              { provider: "ollama", model: "llama3:8b", tools: false },
+              { provider: "ollama", model: "qwen3.5:0.8b", tools: true },
+              { provider: "deepseek", model: "deepseek-chat", tools: true },
+            ],
           }),
           { status: 200 },
         ),
@@ -67,6 +70,7 @@ const AGENT = {
   language: "en",
   greeting: "",
   model: "",
+  provider: "",
   tools: [],
   created_at: "",
   updated_at: "",
@@ -175,7 +179,7 @@ describe("AgentBuilder", () => {
     expect(await screen.findByTestId("tool-warning")).toHaveTextContent(/cannot call tools/i);
 
     // Switching to a tool-capable model clears it.
-    await user.selectOptions(screen.getByTestId("agent-model"), "qwen3.5:0.8b");
+    await user.selectOptions(screen.getByTestId("agent-model"), "ollama:qwen3.5:0.8b");
     await waitFor(() =>
       expect(screen.queryByTestId("tool-warning")).not.toBeInTheDocument(),
     );

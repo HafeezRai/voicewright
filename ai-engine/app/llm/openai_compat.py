@@ -29,6 +29,7 @@ import httpx
 
 from app.cancellation import CancelToken
 from app.llm.base import (
+    PROVIDER_API_KEY_ENV,
     ChatMessage,
     LLMEngine,
     LLMResult,
@@ -540,6 +541,15 @@ class OpenAICompatLLM(LLMEngine):
                 f"(e.g. `ollama pull {self._model}`) or set AI_ENGINE_LLM_MODEL"
             )
         if status in (401, 403):
+            # Name the conventional env var too: someone who has used this
+            # provider before almost certainly has it exported already, and
+            # "set AI_ENGINE_LLM_API_KEY" alone reads like a different secret.
+            conventional = PROVIDER_API_KEY_ENV.get(self._provider)
+            if conventional:
+                return (
+                    f"no valid API key for {self._provider!r}; set {conventional} "
+                    f"or AI_ENGINE_LLM_API_KEY"
+                )
             return f"set AI_ENGINE_LLM_API_KEY for provider {self._provider!r}"
         if status == 408:
             return "the provider timed out"

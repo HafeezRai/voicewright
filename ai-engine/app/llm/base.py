@@ -31,6 +31,14 @@ from typing import Any, Literal
 from app.cancellation import CancelToken
 from app.tools.base import ToolCall, ToolSpec
 
+#: Conventional environment variable holding each provider's key. Someone who
+#: has run a DeepSeek example before has DEEPSEEK_API_KEY exported already, and
+#: making them copy it into our config as well is a needless step.
+PROVIDER_API_KEY_ENV: dict[str, str] = {
+    "deepseek": "DEEPSEEK_API_KEY",
+    "openai": "OPENAI_API_KEY",
+}
+
 #: Roles accepted by the chat protocol. Deliberately the three every
 #: OpenAI-compatible host agrees on.
 Role = Literal["system", "user", "assistant", "tool"]

@@ -92,14 +92,17 @@ def _llm_for(agent: dict | None):
     pick one that has them -- ``llama3:8b``, this service's default, does not.
     """
     model = (agent or {}).get("model") or ""
-    if not model or model == settings.llm_model:
-        return None  # None means "use the pipeline's own engine"
+    provider = (agent or {}).get("provider") or ""
+    # Nothing to override: the pipeline's own engine already is this.
+    if not provider and (not model or model == settings.llm_model):
+        return None
+    key = f"{provider}:{model}"
     with _llm_lock:
-        engine = _llm_engines.get(model)
+        engine = _llm_engines.get(key)
         if engine is None:
-            engine = build_llm(settings, model=model)
-            _llm_engines[model] = engine
-            logger.info("built an LLM engine for model %s", model)
+            engine = build_llm(settings, model=model or None, provider=provider or None)
+            _llm_engines[key] = engine
+            logger.info("built an LLM engine for %s/%s", provider or "default", model or "default")
         return engine
 
 
@@ -638,12 +641,13 @@ def list_models() -> dict:
     with tools on a model without them is a configuration that looks right and
     silently does nothing. Better to say so in the picker.
     """
+    capable = settings.llm_tool_capable
     return {
-        "default": settings.llm_model,
-        "models": settings.llm_models,
-        # Ollama refuses tools on a model that lacks them; these are the ones
-        # verified to work here (see the tool probe in the README).
-        "tool_capable": list(settings.llm_tool_capable_models),
+        "default": {"provider": settings.llm_provider, "model": settings.llm_model},
+        "options": [
+            {"provider": provider, "model": model, "tools": (provider, model) in capable}
+            for provider, model in settings.llm_options
+        ],
     }
 
 

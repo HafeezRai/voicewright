@@ -13,8 +13,10 @@ send the demo to the wrong host.
 
 from __future__ import annotations
 
+import os
+
 from app.config import Settings
-from app.llm.base import LLMEngine, LLMUnavailableError
+from app.llm.base import PROVIDER_API_KEY_ENV, LLMEngine, LLMUnavailableError
 from app.llm.openai_compat import OpenAICompatLLM
 
 #: Default endpoints per provider, used when ``llm_base_url`` is blank.
@@ -26,36 +28,62 @@ PROVIDER_BASE_URLS: dict[str, str] = {
 }
 
 
-def resolve_base_url(settings: Settings) -> str:
-    """Explicit base URL if configured, else the provider's default."""
+def resolve_base_url(settings: Settings, provider: str | None = None) -> str:
+    """Explicit base URL if configured, else the provider's default.
+
+    ``provider`` overrides the service default, which is how one agent can talk
+    to a hosted model while the rest of the deployment stays on a local one.
+    """
+    name = (provider or settings.llm_provider or "").strip().lower()
     configured = (settings.llm_base_url or "").strip()
-    if configured:
+    # An explicit base URL wins, but only for the *default* provider -- it is a
+    # deployment-level statement, and applying it to a per-agent override would
+    # silently send that agent to the wrong host.
+    if configured and not provider:
         return configured
-    provider = (settings.llm_provider or "").strip().lower()
-    if provider in PROVIDER_BASE_URLS:
-        return PROVIDER_BASE_URLS[provider]
+    if name in PROVIDER_BASE_URLS:
+        return PROVIDER_BASE_URLS[name]
     known = ", ".join(sorted(PROVIDER_BASE_URLS))
     raise LLMUnavailableError(
-        f"unknown LLM provider {settings.llm_provider!r} and no "
-        f"AI_ENGINE_LLM_BASE_URL set; known providers: {known}"
+        f"unknown LLM provider {name!r} and no AI_ENGINE_LLM_BASE_URL set; "
+        f"known providers: {known}"
     )
 
 
-def build_llm(settings: Settings, *, model: str | None = None) -> LLMEngine:
-    """Construct the configured LLM engine (nothing is contacted until first use).
+def resolve_api_key(settings: Settings, provider: str | None = None) -> str | None:
+    """The key for a provider: the configured one, or its conventional env var.
 
-    ``model`` overrides the service default, which is how an agent that needs a
-    tool-capable model gets one without changing the deployment's default.
+    Never logged, never echoed into an error.
+    """
+    name = (provider or settings.llm_provider or "").strip().lower()
+    if name == (settings.llm_provider or "").strip().lower() and settings.llm_api_key:
+        return settings.llm_api_key.get_secret_value()
+    env_name = PROVIDER_API_KEY_ENV.get(name)
+    if env_name:
+        value = os.environ.get(env_name, "").strip()
+        if value:
+            return value
+    return None
+
+
+def build_llm(
+    settings: Settings, *, model: str | None = None, provider: str | None = None
+) -> LLMEngine:
+    """Construct an LLM engine (nothing is contacted until first use).
+
+    ``model`` and ``provider`` override the service defaults, which is how an
+    agent that needs a hosted, tool-capable model gets one without changing the
+    deployment's default.
     """
     if settings.llm_backend != "openai_compat":  # pragma: no cover - Literal-typed
         raise LLMUnavailableError(f"unknown LLM backend: {settings.llm_backend!r}")
 
-    api_key = settings.llm_api_key.get_secret_value() if settings.llm_api_key else None
+    name = (provider or settings.llm_provider or "").strip().lower()
     return OpenAICompatLLM(
-        resolve_base_url(settings),
+        resolve_base_url(settings, provider),
         model or settings.llm_model,
-        provider=settings.llm_provider,
-        api_key=api_key,
+        provider=name,
+        api_key=resolve_api_key(settings, provider),
         temperature=settings.llm_temperature,
         max_tokens=settings.llm_max_tokens,
         timeout_s=settings.llm_timeout_s,

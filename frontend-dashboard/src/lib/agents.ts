@@ -46,6 +46,8 @@ export interface Agent {
   /** LLM for this agent. Blank uses the service default -- and only some
    *  models can call tools, so a tool-enabled agent needs one that can. */
   model: string;
+  /** Which service hosts that model ("ollama", "deepseek", ...). */
+  provider: string;
   /** Tools this agent may call, by name. */
   tools: { name: string }[];
   created_at: string;
@@ -61,6 +63,7 @@ export interface AgentInput {
   language?: string;
   greeting?: string;
   model?: string;
+  provider?: string;
   tools?: { name: string }[];
 }
 
@@ -145,11 +148,17 @@ const json = (body: unknown): RequestInit => ({
   body: JSON.stringify(body),
 });
 
+/** One provider+model the deployment offers. */
+export interface ModelOption {
+  provider: string;
+  model: string;
+  /** False means the model will silently never call a tool. */
+  tools: boolean;
+}
+
 export interface ModelCatalogue {
-  default: string;
-  models: string[];
-  /** Models that can call tools. Others will silently never call one. */
-  tool_capable: string[];
+  default: { provider: string; model: string };
+  options: ModelOption[];
 }
 
 export async function listModels(signal?: AbortSignal): Promise<ModelCatalogue> {

@@ -213,9 +213,18 @@ class Settings(BaseSettings):
     llm_tool_rounds: int = Field(default=3, ge=1, le=8, alias="AI_ENGINE_LLM_TOOL_ROUNDS")
     #: Models offered in the agent editor. Free-form on the server; this is
     #: purely what the picker lists.
-    llm_models_hint: str = Field(
-        default="llama3:8b,qwen3.5:0.8b,mistral:latest",
-        alias="AI_ENGINE_LLM_MODELS_HINT",
+    #: "provider:model" pairs the editor offers, comma separated.
+    llm_options_hint: str = Field(
+        default="ollama:llama3:8b,ollama:qwen3.5:0.8b,ollama:mistral:latest,deepseek:deepseek-chat",
+        alias="AI_ENGINE_LLM_OPTIONS_HINT",
+    )
+    #: Which of those can call tools. Verified by probing, not assumed: Ollama
+    #: answers "does not support tools" for llama3 and mistral, and works for
+    #: qwen3.5. Surfaced so the editor can warn instead of letting you build a
+    #: tool-enabled agent that quietly never calls anything.
+    llm_tool_capable_hint: str = Field(
+        default="ollama:qwen3.5:0.8b,ollama:qwen3-coder:30b,deepseek:deepseek-chat",
+        alias="AI_ENGINE_LLM_TOOL_CAPABLE_HINT",
     )
     #: Which of those can call tools. Verified by probing, not assumed: Ollama
     #: answers "does not support tools" for llama3 and mistral, and works for
@@ -330,12 +339,26 @@ class Settings(BaseSettings):
         return self
 
     @property
-    def llm_models(self) -> list[str]:
-        return [m.strip() for m in self.llm_models_hint.split(",") if m.strip()]
+    def llm_options(self) -> list[tuple[str, str]]:
+        """``(provider, model)`` pairs the editor should offer."""
+        pairs: list[tuple[str, str]] = []
+        for entry in self.llm_options_hint.split(","):
+            entry = entry.strip()
+            if not entry:
+                continue
+            provider, _, model = entry.partition(":")
+            if provider and model:
+                pairs.append((provider.strip(), model.strip()))
+        return pairs
 
     @property
-    def llm_tool_capable_models(self) -> list[str]:
-        return [m.strip() for m in self.llm_tool_capable_models_hint.split(",") if m.strip()]
+    def llm_tool_capable(self) -> set[tuple[str, str]]:
+        capable: set[tuple[str, str]] = set()
+        for entry in self.llm_tool_capable_hint.split(","):
+            provider, _, model = entry.strip().partition(":")
+            if provider and model:
+                capable.add((provider.strip(), model.strip()))
+        return capable
 
     @property
     def is_production(self) -> bool:

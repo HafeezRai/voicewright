@@ -68,6 +68,10 @@ CREATE TABLE IF NOT EXISTS agents (
     -- call tools needs a tool-capable model, and which model an agent thinks
     -- with is a per-agent choice for the same reason its prompt is.
     model         TEXT NOT NULL DEFAULT '',
+    -- Which service hosts that model. Blank means the deployment default; an
+    -- agent pointed at a hosted model names it here, so one agent can use a
+    -- hosted LLM without moving the whole deployment off a local one.
+    provider      TEXT NOT NULL DEFAULT '',
     -- JSON array of ToolSpec. Stored as text because SQLite has no JSON type
     -- and the shape is owned by app.tools, not by the schema.
     tools         TEXT NOT NULL DEFAULT '[]',
@@ -130,6 +134,7 @@ _AGENT_FIELDS = (
     "language",
     "greeting",
     "model",
+    "provider",
     "tools",
 )
 
@@ -210,6 +215,7 @@ class AgentStore:
             existing = {row["name"] for row in conn.execute("PRAGMA table_info(agents)")}
             for column, ddl in (
                 ("model", "ALTER TABLE agents ADD COLUMN model TEXT NOT NULL DEFAULT ''"),
+                ("provider", "ALTER TABLE agents ADD COLUMN provider TEXT NOT NULL DEFAULT ''"),
                 ("tools", "ALTER TABLE agents ADD COLUMN tools TEXT NOT NULL DEFAULT '[]'"),
             ):
                 if column not in existing:
@@ -256,8 +262,8 @@ class AgentStore:
                 """
                 INSERT INTO agents
                     (id, org_id, name, role, system_prompt, voice, language,
-                     greeting, model, tools, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     greeting, model, provider, tools, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     agent_id,
@@ -269,6 +275,7 @@ class AgentStore:
                     values["language"],
                     values["greeting"],
                     values["model"],
+                    values["provider"],
                     values["tools"],
                     now,
                     now,

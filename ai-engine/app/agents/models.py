@@ -31,6 +31,9 @@ class AgentCreate(BaseModel):
     #: only some models can call tools, and a tool-enabled agent on a model that
     #: cannot is a configuration error the API reports rather than hides.
     model: str = Field(default="", max_length=120)
+    #: Host for that model ("ollama", "deepseek", ...). Blank uses the
+    #: deployment's provider.
+    provider: str = Field(default="", max_length=40)
     #: Tools this agent may call, as ToolSpec objects (name/description/params).
     tools: list[dict] = Field(default_factory=list, max_length=20)
 
@@ -50,6 +53,7 @@ class AgentUpdate(BaseModel):
     language: str | None = Field(default=None, max_length=32)
     greeting: str | None = Field(default=None, max_length=2000)
     model: str | None = Field(default=None, max_length=120)
+    provider: str | None = Field(default=None, max_length=40)
     tools: list[dict] | None = Field(default=None, max_length=20)
 
 
@@ -65,6 +69,7 @@ class AgentOut(BaseModel):
     language: str
     greeting: str
     model: str
+    provider: str
     tools: list[dict]
     created_at: str
     updated_at: str
