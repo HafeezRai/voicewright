@@ -59,6 +59,7 @@ from app.config import get_settings
 from app.grpc.server import start_grpc_server
 from app.knowledge import Retriever, build_embedder, chunk_text
 from app.knowledge.embeddings import EmbeddingUnavailableError
+from app.llm.factory import build_llm
 from app.llm.history import ConversationHistory
 from app.metrics import (
     KNOWLEDGE_CHUNKS_RETURNED,
@@ -66,9 +67,60 @@ from app.metrics import (
     KNOWLEDGE_RETRIEVALS,
 )
 from app.pipeline import EventKind, VoicePipeline, build_pipeline
+from app.tools import Toolbox, build_registry
 from app.tts.sink import TTSPlaybackSink
 
 settings = get_settings()
+
+#: The tools this deployment can run, resolved once. What any *particular*
+#: agent may call is a subset of these, chosen in its configuration.
+tool_registry = build_registry()
+
+
+#: One engine per model id, built on demand. An engine holds a connection
+#: pool and its own configuration, so they are shared rather than rebuilt per
+#: request -- and a per-agent model would otherwise mean a new pool per turn.
+_llm_engines: dict[str, object] = {}
+_llm_lock = threading.Lock()
+
+
+def _llm_for(agent: dict | None):
+    """The engine an agent should think with, or the service default.
+
+    An agent may name its own model. That is not a nicety: tool calling only
+    works on some models, so an agent configured with tools *must* be able to
+    pick one that has them -- ``llama3:8b``, this service's default, does not.
+    """
+    model = (agent or {}).get("model") or ""
+    if not model or model == settings.llm_model:
+        return None  # None means "use the pipeline's own engine"
+    with _llm_lock:
+        engine = _llm_engines.get(model)
+        if engine is None:
+            engine = build_llm(settings, model=model)
+            _llm_engines[model] = engine
+            logger.info("built an LLM engine for model %s", model)
+        return engine
+
+
+def _toolbox_for(agent: dict | None) -> Toolbox | None:
+    """The tools one agent may use, or None when it has none.
+
+    Names are matched against the registry; an agent configured with a tool
+    this deployment does not have is a configuration mistake, and it simply
+    ends up with fewer tools rather than a failed turn.
+    """
+    if not agent:
+        return None
+    names = [
+        str(spec.get("name", "")).strip()
+        for spec in (agent.get("tools") or [])
+        if isinstance(spec, dict)
+    ]
+    names = [name for name in names if name and tool_registry.has(name)]
+    if not names:
+        return None
+    return Toolbox.build(tool_registry, names)
 
 logging.basicConfig(
     level=getattr(logging, settings.log_level),
@@ -274,7 +326,7 @@ async def llm(payload: LLMRequest) -> dict:
     """Generate a reply from a transcript (no audio involved)."""
     history = _sessions.snapshot(payload.session_id)
     try:
-        result = await _run_off_loop(
+        generation = await _run_off_loop(
             lambda: pipeline.generate(
                 payload.text,
                 system_prompt=payload.system_prompt,
@@ -283,6 +335,7 @@ async def llm(payload: LLMRequest) -> dict:
         )
     except Exception as exc:
         _raise_unavailable("LLM", exc)
+    result = generation.result
     _sessions.record(payload.session_id, payload.text, result.text)
     return result.as_dict()
 
@@ -345,6 +398,7 @@ async def run_pipeline(
     knowledge_provider = (
         functools.partial(_knowledge_for, org_id, agent_id) if agent is not None else None
     )
+    toolbox = _toolbox_for(agent)
 
     history: Sequence = _sessions.snapshot(session_id)
     try:
@@ -356,6 +410,8 @@ async def run_pipeline(
                 system_prompt=effective_prompt,
                 history=history,
                 knowledge_provider=knowledge_provider,
+                toolbox=toolbox,
+                llm=_llm_for(agent),
             )
         )
     except HTTPException:
@@ -372,6 +428,8 @@ async def run_pipeline(
         "usage": result.llm.usage.as_dict() if result.llm.usage else None,
         "agent_id": agent_id,
         "knowledge_chunks": result.knowledge_chunks,
+        "tool_calls": [call.as_dict() for call in result.tool_calls],
+        "tool_results": [outcome.as_dict() for outcome in result.tool_results],
         "audio": {
             "sample_rate": result.speech.sample_rate,
             "duration_s": round(result.speech.duration_s, 3),
@@ -476,12 +534,18 @@ async def stream_pipeline(
                 system_prompt=effective_prompt,
                 history=history,
                 knowledge_provider=knowledge_provider,
+                toolbox=_toolbox_for(agent),
+                llm=_llm_for(agent),
             ):
                 if event.kind is EventKind.TRANSCRIPT_FINAL:
                     transcript_text = event.text or ""
                     yield _sse("transcript", {"text": transcript_text})
                 elif event.kind is EventKind.REPLY_DELTA:
                     yield _sse("reply_delta", {"text": event.text or ""})
+                elif event.kind is EventKind.TOOL_CALL and event.tool_call is not None:
+                    yield _sse("tool_call", event.tool_call.as_dict())
+                elif event.kind is EventKind.TOOL_RESULT and event.tool_result is not None:
+                    yield _sse("tool_result", event.tool_result.as_dict())
                 elif event.kind is EventKind.AUDIO_CHUNK and event.audio is not None:
                     yield _sse(
                         "audio",
@@ -563,6 +627,36 @@ def _agent_or_404(org_id: str, agent_id: str) -> dict:
         # to another org: existence must not leak across tenants.
         raise HTTPException(status_code=404, detail=f"agent not found: {agent_id}")
     return agent
+
+
+@app.get("/models")
+def list_models() -> dict:
+    """Models the editor should offer, and which of them can call tools.
+
+    The tool-capable flag is the important half. Only some models support tool
+    calling -- ``llama3:8b``, this service's default, does not -- and an agent
+    with tools on a model without them is a configuration that looks right and
+    silently does nothing. Better to say so in the picker.
+    """
+    return {
+        "default": settings.llm_model,
+        "models": settings.llm_models,
+        # Ollama refuses tools on a model that lacks them; these are the ones
+        # verified to work here (see the tool probe in the README).
+        "tool_capable": list(settings.llm_tool_capable_models),
+    }
+
+
+@app.get("/tools")
+def list_tools() -> list[dict]:
+    """The tools this deployment can actually run.
+
+    An agent's ``tools`` are *names*. The description and parameter schema come
+    from the registry, not from the stored config, so an agent cannot be given
+    a tool this service does not have -- and the editor can offer a list of
+    real choices instead of a free-text box that silently does nothing.
+    """
+    return [spec.as_dict() for spec in tool_registry.specs_for(tool_registry.names)]
 
 
 @app.post("/agents", response_model=AgentOut, status_code=201)

@@ -10,6 +10,7 @@ import {
   updateAgent,
 } from "../lib/agents";
 import { AGENT_PRESETS } from "../lib/agentPresets";
+import { listModels, listTools, type ModelCatalogue, type ToolSpec } from "../lib/agents";
 import { KnowledgePanel } from "./KnowledgePanel";
 import { StatusPill } from "./StatusPill";
 
@@ -37,6 +38,8 @@ const EMPTY_FORM: AgentInput = {
   voice: WIRED_VOICE,
   language: "en",
   greeting: "",
+  model: "",
+  tools: [],
 };
 
 function describe(error: unknown): string {
@@ -59,6 +62,8 @@ export function AgentBuilder({ onSelect }: { onSelect?: (agent: Agent | null) =>
   const [editingId, setEditingId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [catalogue, setCatalogue] = useState<ModelCatalogue | null>(null);
+  const [available, setAvailable] = useState<ToolSpec[]>([]);
 
   const selected = agents.find((agent) => agent.id === selectedId) ?? null;
 
@@ -85,8 +90,32 @@ export function AgentBuilder({ onSelect }: { onSelect?: (agent: Agent | null) =>
   useEffect(() => {
     const controller = new AbortController();
     void refresh(controller.signal);
+    void listModels(controller.signal).then(setCatalogue).catch(() => undefined);
+    void listTools(controller.signal).then(setAvailable).catch(() => undefined);
     return () => controller.abort();
   }, [refresh]);
+
+  /** Names of the tools currently ticked in the form. */
+  const chosenTools = (form.tools ?? []).map((entry) => entry.name);
+
+  // The failure this guards against is silent: an agent with tools on a model
+  // that cannot call them looks configured and simply never does anything.
+  const toolWarning =
+    chosenTools.length > 0 && catalogue
+      ? (form.model || catalogue.default) && !catalogue.tool_capable.includes(form.model || catalogue.default)
+        ? `\`${form.model || catalogue.default}\` cannot call tools — it will answer without using them. Pick a tool-capable model.`
+        : null
+      : null;
+
+  const toggleTool = useCallback((name: string) => {
+    setForm((prev) => {
+      const current = (prev.tools ?? []).map((entry) => entry.name);
+      const next = current.includes(name)
+        ? current.filter((entry) => entry !== name)
+        : [...current, name];
+      return { ...prev, tools: next.map((entry) => ({ name: entry })) };
+    });
+  }, []);
 
   const set = useCallback(<K extends keyof AgentInput>(key: K, value: AgentInput[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -143,6 +172,8 @@ export function AgentBuilder({ onSelect }: { onSelect?: (agent: Agent | null) =>
       voice: agent.voice || WIRED_VOICE,
       language: agent.language || "en",
       greeting: agent.greeting,
+      model: agent.model || "",
+      tools: (agent.tools ?? []).map((entry) => ({ name: entry.name })),
     });
   }, []);
 
@@ -280,6 +311,66 @@ export function AgentBuilder({ onSelect }: { onSelect?: (agent: Agent | null) =>
             className="rounded-lg border border-cloudpso-line bg-cloudpso-panel2 px-3 py-1.5 text-sm text-slate-100 outline-none focus:border-cloudpso-accent"
           />
         </label>
+
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <label className="flex flex-col gap-1 text-[11px] text-cloudpso-muted">
+            Model
+            <select
+              value={form.model}
+              onChange={(event) => set("model", event.target.value)}
+              data-testid="agent-model"
+              className="rounded-lg border border-cloudpso-line bg-cloudpso-panel2 px-3 py-1.5 text-sm text-slate-100 outline-none focus:border-cloudpso-accent"
+            >
+              <option value="">
+                Service default{catalogue ? ` (${catalogue.default})` : ""}
+              </option>
+              {(catalogue?.models ?? []).map((model) => (
+                <option key={model} value={model}>
+                  {model}
+                  {catalogue?.tool_capable.includes(model)
+                    ? " — tools"
+                    : " — no tool support"}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <fieldset className="mt-3">
+          <legend className="text-[11px] text-cloudpso-muted">
+            Tools this agent may call
+          </legend>
+          {toolWarning ? (
+            <p className="mt-1 text-[11px] text-cloudpso-warn" data-testid="tool-warning">
+              {toolWarning}
+            </p>
+          ) : null}
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {available.length === 0 ? (
+              <span className="text-[11px] text-cloudpso-muted">None available.</span>
+            ) : null}
+            {available.map((tool) => {
+              const on = chosenTools.includes(tool.name);
+              return (
+                <button
+                  key={tool.name}
+                  type="button"
+                  title={tool.description}
+                  data-testid={`tool-${tool.name}`}
+                  aria-pressed={on}
+                  onClick={() => toggleTool(tool.name)}
+                  className={`rounded-full border px-2.5 py-1 font-mono text-[11px] transition ${
+                    on
+                      ? "border-cloudpso-accent/60 bg-cloudpso-accent/15 text-cloudpso-accent"
+                      : "border-cloudpso-line text-cloudpso-muted hover:text-slate-100"
+                  }`}
+                >
+                  {tool.name}
+                </button>
+              );
+            })}
+          </div>
+        </fieldset>
 
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <button

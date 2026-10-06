@@ -100,6 +100,7 @@ from app.metrics import (
 )
 from app.pipeline.segmentation import SentenceSegmenter, iter_sentences
 from app.stt.base import STTEngine, TranscriptionResult
+from app.tools import Toolbox, ToolCall, ToolResult
 from app.tts.base import CancelToken, SynthesisResult, TTSEngine
 from app.tts.sink import TTSPlaybackSink
 
@@ -108,6 +109,14 @@ logger = logging.getLogger(__name__)
 #: Errors that mean "the provider did not answer", as opposed to a bug in our
 #: own code. Only these may be swallowed by ``fallback_reply``.
 _LLM_FAILURES = (LLMUnavailableError, LLMTimeoutError)
+
+
+class _ToolTurnDone(Exception):
+    """Internal: a tool-enabled turn already has its reply; skip the stream."""
+
+
+class _ToolTurnCancelled(Exception):
+    """Internal: barge-in landed during a tool-enabled turn's playback."""
 
 #: Header for the retrieved-knowledge block spliced into the system message.
 #: The wording carries two instructions that matter for a *voice* agent:
@@ -156,6 +165,10 @@ class EventKind(enum.StrEnum):
     TRANSCRIPT_FINAL = "transcript_final"
     #: A piece of the reply text, as it is generated.
     REPLY_DELTA = "reply_delta"
+    #: The model asked to run a tool.
+    TOOL_CALL = "tool_call"
+    #: What that tool returned.
+    TOOL_RESULT = "tool_result"
     AUDIO_CHUNK = "audio_chunk"
     DONE = "done"
     CANCELLED = "cancelled"
@@ -176,6 +189,18 @@ class PipelineEvent:
     #: grounded -- travel on the terminal event.
     knowledge_chunks: int = 0
     model: str = ""
+    #: Set on ``TOOL_CALL`` / ``TOOL_RESULT``.
+    tool_call: ToolCall | None = None
+    tool_result: ToolResult | None = None
+
+
+@dataclass(frozen=True)
+class Generation:
+    """One completed generation, and any tools it used getting there."""
+
+    result: LLMResult
+    tool_calls: tuple[ToolCall, ...] = ()
+    tool_results: tuple[ToolResult, ...] = ()
 
 
 @dataclass
@@ -199,6 +224,9 @@ class TurnResult:
     history_turns: int = 0
     #: How many retrieved knowledge chunks were spliced into the system message.
     knowledge_chunks: int = 0
+    #: Tools the model called this turn, and what they returned.
+    tool_calls: tuple[ToolCall, ...] = ()
+    tool_results: tuple[ToolResult, ...] = ()
     #: Per-stage timings, for the dashboard and for latency accounting.
     timings: dict[str, float] = field(default_factory=dict)
 
@@ -218,6 +246,8 @@ class VoicePipeline:
         *,
         sample_rate: int = 16000,
         chunk_samples: int = 3200,
+        tool_rounds: int = 3,
+        tool_max_tokens: int = 1024,
         system_prompt: str = DEFAULT_SYSTEM_PROMPT,
         fallback_reply: str = "",
     ):
@@ -226,6 +256,8 @@ class VoicePipeline:
         self.tts = tts
         self.sample_rate = sample_rate
         self.chunk_samples = chunk_samples
+        self.tool_rounds = tool_rounds
+        self.tool_max_tokens = tool_max_tokens
         #: The configured persona. A caller may override it per turn; blank
         #: disables the system message entirely.
         self.system_prompt = system_prompt
@@ -259,10 +291,17 @@ class VoicePipeline:
         system_prompt: str | None = None,
         history: Sequence[ChatMessage] | None = None,
         knowledge: Sequence[str] | None = None,
-    ) -> LLMResult:
+        toolbox: Toolbox | None = None,
+        llm: LLMEngine | None = None,
+    ) -> Generation:
         """Generate one reply, recording LLM metrics."""
         return self._generate(
-            text, system_prompt=system_prompt, history=history, knowledge=knowledge
+            text,
+            system_prompt=system_prompt,
+            history=history,
+            knowledge=knowledge,
+            toolbox=toolbox,
+            llm=llm,
         )
 
     def synthesize(self, text: str, *, speed: float | None = None) -> SynthesisResult:
@@ -278,6 +317,8 @@ class VoicePipeline:
         system_prompt: str | None = None,
         history: Sequence[ChatMessage] | None = None,
         knowledge_provider: KnowledgeProvider | None = None,
+        toolbox: Toolbox | None = None,
+        llm: LLMEngine | None = None,
     ) -> TurnResult:
         """Run one full STT -> LLM -> TTS turn and return the result.
 
@@ -298,7 +339,14 @@ class VoicePipeline:
 
         knowledge = knowledge_provider(transcript.text) if knowledge_provider else None
         return self._turn_from_transcript(
-            transcript, stt_s, started, system_prompt, history, knowledge
+            transcript,
+            stt_s,
+            started,
+            system_prompt,
+            history,
+            knowledge,
+            toolbox=toolbox,
+            llm=llm,
         )
 
     def process_stream(
@@ -338,6 +386,8 @@ class VoicePipeline:
         system_prompt: str | None = None,
         history: Sequence[ChatMessage] | None = None,
         knowledge_provider: KnowledgeProvider | None = None,
+        toolbox: Toolbox | None = None,
+        llm: LLMEngine | None = None,
     ) -> Iterator[PipelineEvent]:
         """Yield the turn as it happens, cutting it off on barge-in.
 
@@ -400,6 +450,19 @@ class VoicePipeline:
 
         try:
             try:
+                if toolbox:
+                    # A tool-enabled turn cannot stream: the model has to finish
+                    # deciding, the tool has to run, and only then is there
+                    # anything worth saying. The whole reply is generated first
+                    # and then spoken a sentence at a time, so the *audio* still
+                    # starts early even though the text did not.
+                    yield from self._speak_tool_turn(
+                        messages, toolbox, llm, sink, token, speak, parts
+                    )
+                    if cancelled:
+                        raise _ToolTurnCancelled
+                    raise _ToolTurnDone
+
                 for delta in self.llm.stream(messages, cancel=token):
                     # ---- BARGE-IN CANCEL POINT A: between deltas ------------
                     # The turn was abandoned while the model was still thinking;
@@ -420,6 +483,10 @@ class VoicePipeline:
                     # The deltas ran out with a fragment still buffered (a reply
                     # that stopped mid-sentence still gets spoken).
                     yield from speak(segmenter.flush())
+            except (_ToolTurnDone, _ToolTurnCancelled):
+                # A tool-enabled turn already produced (and spoke) its reply;
+                # the delta loop below never ran, so there is nothing to do.
+                pass
             except _LLM_FAILURES as exc:
                 if not self.fallback_reply:
                     LLM_REQUESTS.labels(provider=provider, status="error").inc()
@@ -516,6 +583,57 @@ class VoicePipeline:
         messages.append(ChatMessage(role="user", content=text))
         return messages
 
+    def _complete_with_tools(
+        self,
+        messages: list[ChatMessage],
+        toolbox: Toolbox | None,
+        llm: LLMEngine | None = None,
+    ) -> tuple[LLMResult, tuple[ToolCall, ...], tuple[ToolResult, ...]]:
+        """Generate, running whatever tools the model asks for, until it answers.
+
+        Bounded by ``tool_rounds``. A small model can ask for a tool, be given
+        the result, and ask again -- and a voice agent that thinks forever is
+        worse than one that gives up and says so. On the last round the tools
+        are withdrawn, so the model has to produce speech rather than another
+        call.
+
+        The token budget is the tool budget, not the reply budget. A *thinking*
+        model spends its allowance on hidden reasoning before it emits a call:
+        measured on qwen3.5:0.8b, a 160-token budget produced a tool call once
+        in five and otherwise returned ``finish_reason=length``. At 512 it
+        managed four in five.
+        """
+        engine = llm or self.llm
+        if not toolbox:
+            return engine.generate(messages), (), ()
+
+        calls: list[ToolCall] = []
+        results: list[ToolResult] = []
+        for round_index in range(self.tool_rounds):
+            last_round = round_index == self.tool_rounds - 1
+            result = engine.generate(
+                messages,
+                tools=None if last_round else toolbox.specs,
+                max_tokens=self.tool_max_tokens,
+            )
+            if not result.tool_calls:
+                return result, tuple(calls), tuple(results)
+
+            messages.append(
+                ChatMessage("assistant", result.text, tool_calls=result.tool_calls)
+            )
+            for call in result.tool_calls:
+                outcome = toolbox.run(call)
+                calls.append(call)
+                results.append(outcome)
+                messages.append(
+                    ChatMessage("tool", outcome.content, tool_call_id=call.id)
+                )
+                logger.info("tool %s(%s) -> %s", call.name, call.arguments, outcome.content[:80])
+
+        # Unreachable: the last round passes no tools, so it cannot return calls.
+        return engine.generate(messages, max_tokens=self.tool_max_tokens), tuple(calls), tuple(results)
+
     def _generate(
         self,
         text: str,
@@ -523,12 +641,14 @@ class VoicePipeline:
         system_prompt: str | None,
         history: Sequence[ChatMessage] | None,
         knowledge: Sequence[str] | None = None,
-    ) -> LLMResult:
-        provider = self._provider()
+        toolbox: Toolbox | None = None,
+        llm: LLMEngine | None = None,
+    ) -> Generation:
+        provider = (llm.provider if llm is not None else None) or self._provider()
         messages = self._build_messages(text, system_prompt, history, knowledge)
         started = time.perf_counter()
         try:
-            result = self.llm.generate(messages)
+            result, calls, tool_results = self._complete_with_tools(messages, toolbox, llm)
         except _LLM_FAILURES as exc:
             LLM_REQUESTS.labels(provider=provider, status="error").inc()
             if not self.fallback_reply:
@@ -538,7 +658,7 @@ class VoicePipeline:
             )
             LLM_LATENCY.labels(provider=provider).observe(time.perf_counter() - started)
             LLM_REQUESTS.labels(provider=provider, status="fallback").inc()
-            return LLMResult(
+            fallback = LLMResult(
                 text=self.fallback_reply,
                 model=self.llm.model,
                 provider=provider,
@@ -546,6 +666,27 @@ class VoicePipeline:
                 fallback=True,
                 latency_s=time.perf_counter() - started,
             )
+            return Generation(result=fallback)
+
+        if not result.text.strip():
+            # A model that used a tool and then said nothing leaves the caller in
+            # silence -- the worst outcome in a voice loop, and one no amount of
+            # UI can paper over. Common with small models, which sometimes answer
+            # a tool result with an empty string.
+            logger.warning(
+                "model %s returned an empty reply%s",
+                self.llm.model,
+                f" after {len(calls)} tool call(s)" if calls else "",
+            )
+            if self.fallback_reply:
+                result = LLMResult(
+                    text=self.fallback_reply,
+                    model=result.model,
+                    provider=result.provider,
+                    finish_reason="fallback",
+                    fallback=True,
+                    latency_s=result.latency_s,
+                )
 
         LLM_REQUESTS.labels(provider=provider, status="ok").inc()
         LLM_LATENCY.labels(provider=provider).observe(time.perf_counter() - started)
@@ -560,7 +701,39 @@ class VoicePipeline:
                 LLM_TOKENS.labels(provider=provider, kind="completion").inc(
                     result.usage.completion_tokens
                 )
-        return result
+        return Generation(result=result, tool_calls=calls, tool_results=tool_results)
+
+    def _speak_tool_turn(
+        self,
+        messages: list[ChatMessage],
+        toolbox: Toolbox,
+        llm: LLMEngine | None,
+        sink: TTSPlaybackSink,
+        token: CancelToken,
+        speak: Callable[[Iterable[str]], Iterator[PipelineEvent]],
+        parts: list[str],
+    ) -> Iterator[PipelineEvent]:
+        """Run the tool loop, publish what it did, and speak the answer.
+
+        The tool events are emitted *before* any audio. A caller only hears the
+        answer, but anyone watching the console sees which tools ran to produce
+        it, in order -- and that ordering is the difference between an agent
+        that claims to have booked something and one you can watch book it.
+        """
+        result, calls, outcomes = self._complete_with_tools(messages, toolbox, llm)
+        for call, outcome in zip(calls, outcomes, strict=True):
+            yield PipelineEvent(EventKind.TOOL_CALL, tool_call=call)
+            yield PipelineEvent(EventKind.TOOL_RESULT, tool_result=outcome)
+
+        text = result.text
+        if not text:
+            return
+        parts.append(text)
+        # One delta carrying the whole reply, so DONE.text is still exactly the
+        # join of every REPLY_DELTA a client received.
+        yield PipelineEvent(EventKind.REPLY_DELTA, text=text)
+        if not token.cancelled and sink.is_speaking:
+            yield from speak(iter_sentences(text))
 
     def _speak(
         self,
@@ -602,14 +775,19 @@ class VoicePipeline:
         system_prompt: str | None,
         history: Sequence[ChatMessage] | None,
         knowledge: Sequence[str] | None = None,
+        toolbox: Toolbox | None = None,
+        llm: LLMEngine | None = None,
     ) -> TurnResult:
         t1 = time.perf_counter()
-        llm_result = self._generate(
+        generation = self._generate(
             transcript.text,
             system_prompt=system_prompt,
             history=history,
             knowledge=knowledge,
+            toolbox=toolbox,
+            llm=llm,
         )
+        llm_result = generation.result
         llm_s = time.perf_counter() - t1
 
         t2 = time.perf_counter()
@@ -622,6 +800,8 @@ class VoicePipeline:
         return TurnResult(
             transcript=transcript,
             llm=llm_result,
+            tool_calls=generation.tool_calls,
+            tool_results=generation.tool_results,
             reply_text=llm_result.text,
             speech=speech,
             stt_latency_s=stt_s,

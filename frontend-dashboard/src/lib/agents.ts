@@ -19,6 +19,22 @@
 import { config } from "../config";
 import { decodePcm16 } from "./player";
 
+/** A tool the deployment can run. */
+export interface ToolSpec {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+}
+
+/** One tool the model asked to run, and what came back. */
+export interface ToolInvocation {
+  id: string;
+  name: string;
+  arguments: Record<string, unknown>;
+  ok?: boolean;
+  content?: string;
+}
+
 export interface Agent {
   id: string;
   name: string;
@@ -27,6 +43,11 @@ export interface Agent {
   voice: string;
   language: string;
   greeting: string;
+  /** LLM for this agent. Blank uses the service default -- and only some
+   *  models can call tools, so a tool-enabled agent needs one that can. */
+  model: string;
+  /** Tools this agent may call, by name. */
+  tools: { name: string }[];
   created_at: string;
   updated_at: string;
 }
@@ -39,6 +60,8 @@ export interface AgentInput {
   voice?: string;
   language?: string;
   greeting?: string;
+  model?: string;
+  tools?: { name: string }[];
 }
 
 export interface AgentDocument {
@@ -73,6 +96,9 @@ export interface AgentTurn {
    * its keep.
    */
   knowledge_chunks?: number;
+  /** Tools the agent ran, and what they returned. */
+  tool_calls?: { id: string; name: string; arguments: Record<string, unknown> }[];
+  tool_results?: { id: string; name: string; ok: boolean; content: string }[];
   timings_ms: TurnTimings;
   audio?: { sample_rate: number; duration_s: number; cancelled: boolean; wav_base64?: string };
 }
@@ -118,6 +144,25 @@ const json = (body: unknown): RequestInit => ({
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify(body),
 });
+
+export interface ModelCatalogue {
+  default: string;
+  models: string[];
+  /** Models that can call tools. Others will silently never call one. */
+  tool_capable: string[];
+}
+
+export async function listModels(signal?: AbortSignal): Promise<ModelCatalogue> {
+  const response = await request("/models", { signal });
+  return (await response.json()) as ModelCatalogue;
+}
+
+/** The tools this deployment can actually run. */
+export async function listTools(signal?: AbortSignal): Promise<ToolSpec[]> {
+  const response = await request("/tools", { signal });
+  const payload = (await response.json()) as ToolSpec[] | { tools: ToolSpec[] };
+  return Array.isArray(payload) ? payload : payload.tools;
+}
 
 export async function listAgents(signal?: AbortSignal): Promise<Agent[]> {
   const response = await request("/agents", { signal });
@@ -206,6 +251,10 @@ export interface StreamCallbacks {
   onDelta?(text: string): void;
   /** Fired per audio chunk, in order. Safely decodable with `decodePcm16`. */
   onAudio?(pcm16: Int16Array, sampleRate: number): void;
+  /** The model asked to run a tool. */
+  onToolCall?(call: ToolInvocation): void;
+  /** What that tool returned. */
+  onToolResult?(call: ToolInvocation): void;
   onDone?(result: StreamResult): void;
   /** The turn was cut short (a barge-in, or the model stopped early). */
   onCancelled?(result: StreamResult): void;
@@ -296,6 +345,22 @@ export async function streamAgentTurn(
         callbacks.onDelta?.(text);
         return false;
       }
+      case "tool_call":
+        callbacks.onToolCall?.({
+          id: String(data.id ?? ""),
+          name: String(data.name ?? ""),
+          arguments: (data.arguments as Record<string, unknown>) ?? {},
+        });
+        return false;
+      case "tool_result":
+        callbacks.onToolResult?.({
+          id: String(data.id ?? ""),
+          name: String(data.name ?? ""),
+          arguments: {},
+          ok: Boolean(data.ok),
+          content: String(data.content ?? ""),
+        });
+        return false;
       case "audio": {
         const sampleRate = Number(data.sample_rate ?? 0);
         const pcm16 = decodePcm16(String(data.pcm16 ?? ""));

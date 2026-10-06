@@ -20,6 +20,29 @@ function stubApi(initial: unknown[] = []) {
     const method = init?.method ?? "GET";
     calls.push({ url: href, method, body: init?.body });
 
+    if (href.includes("/models")) {
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            default: "llama3:8b",
+            models: ["llama3:8b", "qwen3.5:0.8b"],
+            tool_capable: ["qwen3.5:0.8b"],
+          }),
+          { status: 200 },
+        ),
+      );
+    }
+    if (href.includes("/tools")) {
+      return Promise.resolve(
+        new Response(
+          JSON.stringify([
+            { name: "check_availability", description: "List free slots", parameters: {} },
+            { name: "book_appointment", description: "Book one", parameters: {} },
+          ]),
+          { status: 200 },
+        ),
+      );
+    }
     if (href.includes("/documents")) {
       return Promise.resolve(new Response(JSON.stringify([]), { status: 200 }));
     }
@@ -43,6 +66,8 @@ const AGENT = {
   voice: "vits-piper-en_US-amy-low",
   language: "en",
   greeting: "",
+  model: "",
+  tools: [],
   created_at: "",
   updated_at: "",
 };
@@ -134,6 +159,35 @@ describe("AgentBuilder", () => {
     expect((screen.getByTestId("agent-prompt") as HTMLTextAreaElement).value).toMatch(
       /clinic receptionist/i,
     );
+  });
+
+  it("warns when tools are selected on a model that cannot call them", async () => {
+    // The failure this prevents is silent: the agent looks configured and
+    // simply never calls anything.
+    stubApi([]);
+    const user = userEvent.setup();
+    render(<AgentBuilder />);
+    await screen.findByText(/No agents yet/i);
+
+    await user.click(await screen.findByTestId("tool-check_availability"));
+
+    // Default model cannot call tools -> warned.
+    expect(await screen.findByTestId("tool-warning")).toHaveTextContent(/cannot call tools/i);
+
+    // Switching to a tool-capable model clears it.
+    await user.selectOptions(screen.getByTestId("agent-model"), "qwen3.5:0.8b");
+    await waitFor(() =>
+      expect(screen.queryByTestId("tool-warning")).not.toBeInTheDocument(),
+    );
+  });
+
+  it("only offers tools this deployment can actually run", async () => {
+    stubApi([]);
+    render(<AgentBuilder />);
+    await screen.findByText(/No agents yet/i);
+
+    const names = (await screen.findAllByTestId(/^tool-/)).map((el) => el.textContent);
+    expect(names).toEqual(["check_availability", "book_appointment"]);
   });
 
   it("only offers a voice the TTS backend actually ships", async () => {

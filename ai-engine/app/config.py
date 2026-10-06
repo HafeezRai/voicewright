@@ -200,6 +200,31 @@ class Settings(BaseSettings):
     )
     #: The cheapest latency lever there is: a demo reply is one or two sentences.
     llm_max_tokens: int = Field(default=160, ge=1, le=4096, alias="AI_ENGINE_LLM_MAX_TOKENS")
+    #: Token budget for a turn that can call tools.
+    #:
+    #: Much larger than ``llm_max_tokens``, and it has to be. A spoken reply is
+    #: two or three sentences, but a *thinking* model -- which is what the
+    #: tool-capable models on this machine are -- spends its budget on hidden
+    #: reasoning before it emits anything. Measured on qwen3.5:0.8b: at 160
+    #: tokens it called a tool 1 time in 5 and returned ``finish_reason=length``
+    #: the rest; at 512 it called one 4 times in 5.
+    llm_tool_max_tokens: int = Field(default=1024, ge=64, le=16384, alias="AI_ENGINE_LLM_TOOL_MAX_TOKENS")
+    #: How many tool rounds one turn may take before it must answer.
+    llm_tool_rounds: int = Field(default=3, ge=1, le=8, alias="AI_ENGINE_LLM_TOOL_ROUNDS")
+    #: Models offered in the agent editor. Free-form on the server; this is
+    #: purely what the picker lists.
+    llm_models_hint: str = Field(
+        default="llama3:8b,qwen3.5:0.8b,mistral:latest",
+        alias="AI_ENGINE_LLM_MODELS_HINT",
+    )
+    #: Which of those can call tools. Verified by probing, not assumed: Ollama
+    #: answers "does not support tools" for llama3 and mistral, and works for
+    #: qwen3.5. Surfaced so the editor can warn instead of letting you build a
+    #: tool-enabled agent that quietly never calls anything.
+    llm_tool_capable_models_hint: str = Field(
+        default="qwen3.5:0.8b,qwen3-coder:30b",
+        alias="AI_ENGINE_LLM_TOOL_CAPABLE_MODELS",
+    )
     #: Per-chunk read timeout under streaming, so a long generation is fine as
     #: long as tokens keep arriving.
     llm_timeout_s: float = Field(default=30.0, gt=0.0, alias="AI_ENGINE_LLM_TIMEOUT_S")
@@ -303,6 +328,14 @@ class Settings(BaseSettings):
                 ", ".join(legacy),
             )
         return self
+
+    @property
+    def llm_models(self) -> list[str]:
+        return [m.strip() for m in self.llm_models_hint.split(",") if m.strip()]
+
+    @property
+    def llm_tool_capable_models(self) -> list[str]:
+        return [m.strip() for m in self.llm_tool_capable_models_hint.split(",") if m.strip()]
 
     @property
     def is_production(self) -> bool:

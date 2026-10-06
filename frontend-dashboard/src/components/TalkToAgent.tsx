@@ -8,6 +8,7 @@ import {
   streamAgentTurn,
 } from "../lib/agents";
 import { synthesize } from "../lib/aiEngine";
+import type { ToolInvocation } from "../lib/agents";
 import { MIC_CONSTRAINTS, PcmCapture, resampleToMonoWav } from "../lib/audio";
 import { type ConversationTurn as Result, emptyTurn } from "../lib/conversation";
 import { looksLikeEcho } from "../lib/echo";
@@ -142,6 +143,8 @@ export function TalkToAgent({ agent }: { agent: Agent }) {
       //: Set when the transcript turned out to be the agent's own voice, so the
       //: resulting abort is not reported as an interruption.
       let rejectedAsEcho = false;
+      //: Tools this turn has run, in order. Grows as the stream reports them.
+      let toolCalls: ToolInvocation[] = [];
       const ensureRow = () => {
         if (rowCreated) return;
         rowCreated = true;
@@ -178,6 +181,20 @@ export function TalkToAgent({ agent }: { agent: Agent }) {
               // Track what is about to be spoken, so the next transcript can be
               // checked against it.
               agentSpeechRef.current = { text: reply, endedAt: null };
+            },
+            onToolCall: (call) => {
+              ensureRow();
+              toolCalls = [...toolCalls, call];
+              patch(id, { tools: toolCalls });
+            },
+            onToolResult: (outcome) => {
+              ensureRow();
+              toolCalls = toolCalls.map((entry) =>
+                entry.id === outcome.id
+                  ? { ...entry, ok: outcome.ok, content: outcome.content }
+                  : entry,
+              );
+              patch(id, { tools: toolCalls });
             },
             onAudio: (pcm16, sampleRate) => {
               ensureRow();
@@ -385,6 +402,11 @@ export function TalkToAgent({ agent }: { agent: Agent }) {
           reply: turn.reply_text,
           model: turn.model,
           knowledgeChunks: turn.knowledge_chunks ?? 0,
+          tools: (turn.tool_calls ?? []).map((call) => ({
+            ...call,
+            ok: (turn.tool_results ?? []).find((r) => r.id === call.id)?.ok,
+            content: (turn.tool_results ?? []).find((r) => r.id === call.id)?.content,
+          })),
           // Nothing is audible until the whole turn lands. That is precisely
           // the comparison, so first audio == total here by construction.
           firstAudioMs: elapsed,

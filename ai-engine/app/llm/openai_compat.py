@@ -22,7 +22,7 @@ from __future__ import annotations
 import json
 import logging
 import time
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from typing import Any
 
 import httpx
@@ -36,8 +36,96 @@ from app.llm.base import (
     LLMUnavailableError,
     LLMUsage,
 )
+from app.tools.base import ToolCall, ToolSpec
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Tool-call parsing
+#
+# Providers express a function call in two different shapes depending on
+# whether the response streamed, and both have to end up as the same
+# `ToolCall`. Keeping the parsers at module level (rather than methods) means
+# they can be tested against captured payloads with no client at all.
+# ---------------------------------------------------------------------------
+
+
+def tool_calls_from_message(message: Mapping[str, Any]) -> tuple[ToolCall, ...]:
+    """Tool calls carried whole on a non-streaming assistant message."""
+    raw = message.get("tool_calls")
+    if not isinstance(raw, Sequence):
+        return ()
+    calls: list[ToolCall] = []
+    for index, entry in enumerate(raw):
+        if not isinstance(entry, Mapping):
+            continue
+        function = entry.get("function")
+        if not isinstance(function, Mapping):
+            continue
+        name = str(function.get("name") or "").strip()
+        if not name:
+            continue
+        calls.append(
+            ToolCall.parse(
+                call_id=str(entry.get("id") or f"call_{index}"),
+                name=name,
+                arguments=function.get("arguments") or "",
+            )
+        )
+    return tuple(calls)
+
+
+def accumulate_tool_call_deltas(
+    partial: dict[int, dict[str, str]], data: Mapping[str, Any]
+) -> None:
+    """Fold one SSE chunk's tool-call fragments into ``partial``.
+
+    A streamed call arrives in pieces: the first chunk carries the id and the
+    name, later ones carry slices of the arguments JSON. They are keyed by
+    ``index`` because one reply may ask for several tools at once, and the
+    argument fragments must be concatenated in arrival order.
+    """
+    for choice in data.get("choices") or ():
+        if not isinstance(choice, Mapping):
+            continue
+        delta = choice.get("delta") or choice.get("message")
+        if not isinstance(delta, Mapping):
+            continue
+        for entry in delta.get("tool_calls") or ():
+            if not isinstance(entry, Mapping):
+                continue
+            index = entry.get("index")
+            key = index if isinstance(index, int) else 0
+            slot = partial.setdefault(key, {"id": "", "name": "", "arguments": ""})
+            if entry.get("id"):
+                slot["id"] = str(entry["id"])
+            function = entry.get("function")
+            if isinstance(function, Mapping):
+                if function.get("name"):
+                    slot["name"] = str(function["name"])
+                if function.get("arguments"):
+                    slot["arguments"] += str(function["arguments"])
+
+
+def finish_tool_call_deltas(
+    partial: Mapping[int, Mapping[str, str]],
+) -> tuple[ToolCall, ...]:
+    """Build whole calls from the accumulated fragments, in send order."""
+    calls: list[ToolCall] = []
+    for index in sorted(partial):
+        slot = partial[index]
+        name = (slot.get("name") or "").strip()
+        if not name:
+            continue
+        calls.append(
+            ToolCall.parse(
+                call_id=slot.get("id") or f"call_{index}",
+                name=name,
+                arguments=slot.get("arguments") or "",
+            )
+        )
+    return tuple(calls)
+
 
 #: Model-name markers for families that emit chain-of-thought. Ollama advertises
 #: this as the ``thinking`` capability, and a reasoning model that streams its
@@ -153,7 +241,13 @@ class OpenAICompatLLM(LLMEngine):
         )
 
     # -- generation ---------------------------------------------------------
-    def generate(self, messages: Sequence[ChatMessage]) -> LLMResult:
+    def generate(
+        self,
+        messages: Sequence[ChatMessage],
+        *,
+        tools: Sequence[ToolSpec] | None = None,
+        max_tokens: int | None = None,
+    ) -> LLMResult:
         """Return the reply in full.
 
         When ``stream`` is enabled this uses the SSE transport and accumulates
@@ -163,31 +257,46 @@ class OpenAICompatLLM(LLMEngine):
         """
         self._guard_reasoning_model()
         if self._stream:
-            return self._generate_streaming(messages)
-        return self._generate_once(messages)
+            return self._generate_streaming(messages, tools, max_tokens)
+        return self._generate_once(messages, tools, max_tokens)
 
     def stream(
         self,
         messages: Sequence[ChatMessage],
         *,
         cancel: CancelToken | None = None,
+        tools: Sequence[ToolSpec] | None = None,
+        max_tokens: int | None = None,
+        on_tool_calls: Callable[[tuple[ToolCall, ...]], None] | None = None,
     ) -> Iterator[str]:
-        """Yield text deltas as they arrive, stopping between chunks on cancel."""
+        """Yield text deltas as they arrive, stopping between chunks on cancel.
+
+        Tool requests arrive interleaved with (usually before) any text, so they
+        are accumulated by index and reported through ``on_tool_calls`` when the
+        stream ends. A turn that is going to call a tool produces no text, so
+        nothing is spoken while it decides.
+        """
         self._guard_reasoning_model()
         started = time.perf_counter()
-        payload = self._payload(messages, stream=True)
+        payload = self._payload(messages, stream=True, tools=tools, max_tokens=max_tokens)
+        partial: dict[int, dict[str, str]] = {}
         try:
             with self._http.stream("POST", self._endpoint, json=payload) as response:
                 if response.status_code >= 400:
                     response.read()
                     raise LLMUnavailableError(self._describe_error(response))
                 for data in self._iter_sse(response):
+                    accumulate_tool_call_deltas(partial, data)
                     if cancel is not None and cancel.cancelled:
                         logger.debug("LLM stream cancelled after %.3fs", time.perf_counter() - started)
                         return
                     yield from self._chunk_texts(data)
         except httpx.HTTPError as exc:
             raise self._transport_error(exc) from exc
+
+        calls = finish_tool_call_deltas(partial)
+        if calls and on_tool_calls is not None:
+            on_tool_calls(calls)
 
     # -- internals: request/response ----------------------------------------
     def _headers(self) -> dict[str, str]:
@@ -202,13 +311,18 @@ class OpenAICompatLLM(LLMEngine):
         return headers
 
     def _payload(
-        self, messages: Sequence[ChatMessage], *, stream: bool
+        self,
+        messages: Sequence[ChatMessage],
+        *,
+        stream: bool,
+        tools: Sequence[ToolSpec] | None = None,
+        max_tokens: int | None = None,
     ) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "model": self._model,
             "messages": [m.as_dict() for m in messages],
             "temperature": self._temperature,
-            "max_tokens": self._max_tokens,
+            "max_tokens": max_tokens or self._max_tokens,
             "stream": stream,
         }
         if stream:
@@ -216,13 +330,23 @@ class OpenAICompatLLM(LLMEngine):
             # trailing chunk with an empty `choices` list. Verified against
             # Ollama 0.x on 127.0.0.1:11434 before relying on it.
             payload["stream_options"] = {"include_usage": True}
+        if tools:
+            payload["tools"] = [spec.as_openai() for spec in tools]
+            # Let the model choose. Forcing a tool call would make every turn
+            # call something, including "hello".
+            payload["tool_choice"] = "auto"
         # Provider-specific knobs, e.g. Ollama's {"keep_alive": "30m"}.
         payload.update(self._extra_body)
         return payload
 
-    def _generate_once(self, messages: Sequence[ChatMessage]) -> LLMResult:
+    def _generate_once(
+        self,
+        messages: Sequence[ChatMessage],
+        tools: Sequence[ToolSpec] | None = None,
+        max_tokens: int | None = None,
+    ) -> LLMResult:
         started = time.perf_counter()
-        payload = self._payload(messages, stream=False)
+        payload = self._payload(messages, stream=False, tools=tools, max_tokens=max_tokens)
         try:
             response = self._http.post(self._endpoint, json=payload)
         except httpx.HTTPError as exc:
@@ -238,19 +362,26 @@ class OpenAICompatLLM(LLMEngine):
             ) from exc
         return self._result_from_body(body, started)
 
-    def _generate_streaming(self, messages: Sequence[ChatMessage]) -> LLMResult:
+    def _generate_streaming(
+        self,
+        messages: Sequence[ChatMessage],
+        tools: Sequence[ToolSpec] | None = None,
+        max_tokens: int | None = None,
+    ) -> LLMResult:
         started = time.perf_counter()
         first_token_s: float | None = None
         parts: list[str] = []
         usage: LLMUsage | None = None
         finish_reason = ""
-        payload = self._payload(messages, stream=True)
+        partial: dict[int, dict[str, str]] = {}
+        payload = self._payload(messages, stream=True, tools=tools, max_tokens=max_tokens)
         try:
             with self._http.stream("POST", self._endpoint, json=payload) as response:
                 if response.status_code >= 400:
                     response.read()
                     raise LLMUnavailableError(self._describe_error(response))
                 for data in self._iter_sse(response):
+                    accumulate_tool_call_deltas(partial, data)
                     parsed_usage = LLMUsage.from_mapping(data.get("usage"))
                     if parsed_usage is not None:
                         usage = parsed_usage
@@ -272,6 +403,7 @@ class OpenAICompatLLM(LLMEngine):
             usage=usage,
             latency_s=time.perf_counter() - started,
             first_token_s=first_token_s,
+            tool_calls=finish_tool_call_deltas(partial),
         )
 
     @staticmethod
@@ -315,10 +447,14 @@ class OpenAICompatLLM(LLMEngine):
             raise LLMUnavailableError(f"{self._provider} returned a malformed choice")
         message = choice.get("message")
         text = ""
-        if isinstance(message, Mapping) and isinstance(message.get("content"), str):
-            text = message["content"]
+        calls: tuple[ToolCall, ...] = ()
+        if isinstance(message, Mapping):
+            if isinstance(message.get("content"), str):
+                text = message["content"]
+            calls = tool_calls_from_message(message)
         return LLMResult(
             text=text.strip(),
+            tool_calls=calls,
             model=str(body.get("model") or self._model),
             provider=self._provider,
             finish_reason=str(choice.get("finish_reason") or ""),

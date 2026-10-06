@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 
+import type { ToolInvocation } from "../lib/agents";
 import type { ConversationTurn } from "../lib/conversation";
 
 /**
@@ -47,6 +48,9 @@ export function Transcript({
         {ordered.map((turn) => (
           <div key={turn.id} className="flex flex-col gap-2">
             {turn.transcript ? <UserBubble turn={turn} /> : null}
+            {turn.tools.map((call) => (
+              <ToolRow key={`${turn.id}-${call.id}`} call={call} />
+            ))}
             {turn.reply ? <AgentBubble turn={turn} /> : null}
             {turn.error ? <Note turn={turn} /> : null}
           </div>
@@ -129,6 +133,34 @@ function Caption({ turn }: { turn: ConversationTurn }) {
       {turn.totalMs !== null ? <> · turn {turn.totalMs}ms</> : null}
       {turn.model ? <> · {turn.model}</> : null}
     </p>
+  );
+}
+
+/**
+ * One tool the agent used, and what it returned.
+ *
+ * Deliberately not styled as speech. A caller should never hear "I called
+ * check_availability"; it is machinery, and rendering it as a bubble would make
+ * it look like something the agent said.
+ */
+function ToolRow({ call }: { call: ToolInvocation }) {
+  const args = Object.entries(call.arguments ?? {})
+    .map(([key, value]) => `${key}=${JSON.stringify(value)}`)
+    .join(" ");
+  return (
+    <div className="flex justify-start pl-2" data-testid="turn-tool">
+      <div className="max-w-[80%] rounded-lg border border-dashed border-cloudpso-line px-3 py-1.5 font-mono text-[10px]">
+        <p className="text-cloudpso-muted">
+          <span className="text-cloudpso-accent">tool</span> {call.name}
+          {args ? `(${args})` : "()"}
+        </p>
+        {call.content !== undefined ? (
+          <p className={call.ok === false ? "text-cloudpso-err" : "text-cloudpso-muted/80"}>
+            {call.ok === false ? "✗" : "→"} {call.content}
+          </p>
+        ) : null}
+      </div>
+    </div>
   );
 }
 

@@ -27,6 +27,12 @@ class AgentCreate(BaseModel):
     language: str = Field(default="", max_length=32)
     #: Spoken before the conversation starts, if the client chooses to play it.
     greeting: str = Field(default="", max_length=2000)
+    #: LLM id for this agent. Blank uses the service default -- but note that
+    #: only some models can call tools, and a tool-enabled agent on a model that
+    #: cannot is a configuration error the API reports rather than hides.
+    model: str = Field(default="", max_length=120)
+    #: Tools this agent may call, as ToolSpec objects (name/description/params).
+    tools: list[dict] = Field(default_factory=list, max_length=20)
 
 
 class AgentUpdate(BaseModel):
@@ -43,6 +49,8 @@ class AgentUpdate(BaseModel):
     voice: str | None = Field(default=None, max_length=120)
     language: str | None = Field(default=None, max_length=32)
     greeting: str | None = Field(default=None, max_length=2000)
+    model: str | None = Field(default=None, max_length=120)
+    tools: list[dict] | None = Field(default=None, max_length=20)
 
 
 class AgentOut(BaseModel):
@@ -56,6 +64,8 @@ class AgentOut(BaseModel):
     voice: str
     language: str
     greeting: str
+    model: str
+    tools: list[dict]
     created_at: str
     updated_at: str
 

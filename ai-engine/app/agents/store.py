@@ -25,6 +25,7 @@ here means there is exactly one place that knows the shape of the store.
 
 from __future__ import annotations
 
+import json
 import logging
 import sqlite3
 import uuid
@@ -63,6 +64,13 @@ CREATE TABLE IF NOT EXISTS agents (
     voice         TEXT NOT NULL DEFAULT '',
     language      TEXT NOT NULL DEFAULT '',
     greeting      TEXT NOT NULL DEFAULT '',
+    -- Per-agent LLM. Empty means "use the service default". An agent that can
+    -- call tools needs a tool-capable model, and which model an agent thinks
+    -- with is a per-agent choice for the same reason its prompt is.
+    model         TEXT NOT NULL DEFAULT '',
+    -- JSON array of ToolSpec. Stored as text because SQLite has no JSON type
+    -- and the shape is owned by app.tools, not by the schema.
+    tools         TEXT NOT NULL DEFAULT '[]',
     created_at    TEXT NOT NULL,
     updated_at    TEXT NOT NULL
 );
@@ -98,7 +106,32 @@ CREATE INDEX IF NOT EXISTS idx_chunks_agent ON chunks(org_id, agent_id);
 
 #: Columns of ``agents`` the API may set, in schema order. Keeps the create and
 #: update statements honest about what an agent *is*.
-_AGENT_FIELDS = ("name", "role", "system_prompt", "voice", "language", "greeting")
+def _row_to_agent(row: sqlite3.Row) -> dict[str, Any]:
+    """Decode a stored agent.
+
+    ``tools`` is JSON text in the column and a list everywhere else, so the
+    conversion happens in one place rather than at every call site.
+    """
+    agent = dict(row)
+    raw = agent.get("tools")
+    try:
+        parsed = json.loads(raw) if isinstance(raw, str) and raw else []
+    except ValueError:
+        parsed = []
+    agent["tools"] = parsed if isinstance(parsed, list) else []
+    return agent
+
+
+_AGENT_FIELDS = (
+    "name",
+    "role",
+    "system_prompt",
+    "voice",
+    "language",
+    "greeting",
+    "model",
+    "tools",
+)
 
 
 def _now() -> str:
@@ -123,6 +156,7 @@ class AgentStore:
                 "INSERT OR IGNORE INTO orgs (id, name, created_at) VALUES (?, ?, ?)",
                 (DEFAULT_ORG_ID, DEFAULT_ORG_NAME, _now()),
             )
+        self._migrate()
 
     @property
     def path(self) -> str:
@@ -164,6 +198,23 @@ class AgentStore:
             conn.close()
 
     # -- orgs ---------------------------------------------------------------
+    def _migrate(self) -> None:
+        """Add columns introduced after a database was first created.
+
+        The service ships as a single file with no migration tool, and a demo
+        that refuses to start because a column is missing is worse than one that
+        adds it. Cheap for the handful of columns this app has; a real schema
+        change would want something better.
+        """
+        with self._connect() as conn:
+            existing = {row["name"] for row in conn.execute("PRAGMA table_info(agents)")}
+            for column, ddl in (
+                ("model", "ALTER TABLE agents ADD COLUMN model TEXT NOT NULL DEFAULT ''"),
+                ("tools", "ALTER TABLE agents ADD COLUMN tools TEXT NOT NULL DEFAULT '[]'"),
+            ):
+                if column not in existing:
+                    conn.execute(ddl)
+
     def org_exists(self, org_id: str) -> bool:
         with self._read() as conn:
             row = conn.execute("SELECT 1 FROM orgs WHERE id = ?", (org_id,)).fetchone()
@@ -193,15 +244,20 @@ class AgentStore:
         """Insert an agent. Caller must have checked the org exists."""
         agent_id = _new_id()
         now = _now()
-        values = {field: str(data.get(field) or "") for field in _AGENT_FIELDS}
+        values = {
+            field: str(data.get(field) or "")
+            for field in _AGENT_FIELDS
+            if field != "tools"
+        }
         values["name"] = str(data["name"])
+        values["tools"] = json.dumps(list(data.get("tools") or []))
         with self._write() as conn:
             conn.execute(
                 """
                 INSERT INTO agents
                     (id, org_id, name, role, system_prompt, voice, language,
-                     greeting, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     greeting, model, tools, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     agent_id,
@@ -212,6 +268,8 @@ class AgentStore:
                     values["voice"],
                     values["language"],
                     values["greeting"],
+                    values["model"],
+                    values["tools"],
                     now,
                     now,
                 ),
@@ -226,7 +284,7 @@ class AgentStore:
                 "SELECT * FROM agents WHERE id = ? AND org_id = ?",
                 (agent_id, org_id),
             ).fetchone()
-        return dict(row) if row else None
+        return _row_to_agent(row) if row else None
 
     def list_agents(self, org_id: str) -> list[dict[str, Any]]:
         with self._read() as conn:
@@ -234,7 +292,7 @@ class AgentStore:
                 "SELECT * FROM agents WHERE org_id = ? ORDER BY created_at, id",
                 (org_id,),
             ).fetchall()
-        return [dict(row) for row in rows]
+        return [_row_to_agent(row) for row in rows]
 
     def update_agent(
         self, org_id: str, agent_id: str, changes: dict[str, Any]
@@ -245,6 +303,9 @@ class AgentStore:
         dropped by the caller (``AgentUpdate`` uses None for "unchanged").
         """
         updates = {k: v for k, v in changes.items() if k in _AGENT_FIELDS and v is not None}
+        if "tools" in updates:
+            # A list cannot be bound to a parameter; the column holds JSON text.
+            updates["tools"] = json.dumps(list(updates["tools"] or []))
         if not updates:
             return self.get_agent(org_id, agent_id)
         assignments = ", ".join(f"{field} = ?" for field in updates)

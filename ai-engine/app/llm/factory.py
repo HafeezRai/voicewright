@@ -41,15 +41,19 @@ def resolve_base_url(settings: Settings) -> str:
     )
 
 
-def build_llm(settings: Settings) -> LLMEngine:
-    """Construct the configured LLM engine (nothing is contacted until first use)."""
+def build_llm(settings: Settings, *, model: str | None = None) -> LLMEngine:
+    """Construct the configured LLM engine (nothing is contacted until first use).
+
+    ``model`` overrides the service default, which is how an agent that needs a
+    tool-capable model gets one without changing the deployment's default.
+    """
     if settings.llm_backend != "openai_compat":  # pragma: no cover - Literal-typed
         raise LLMUnavailableError(f"unknown LLM backend: {settings.llm_backend!r}")
 
     api_key = settings.llm_api_key.get_secret_value() if settings.llm_api_key else None
     return OpenAICompatLLM(
         resolve_base_url(settings),
-        settings.llm_model,
+        model or settings.llm_model,
         provider=settings.llm_provider,
         api_key=api_key,
         temperature=settings.llm_temperature,

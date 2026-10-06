@@ -23,15 +23,17 @@ provider overrides it with the real SSE loop.
 from __future__ import annotations
 
 import abc
-from collections.abc import Iterator, Mapping, Sequence
+import json
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
 
 from app.cancellation import CancelToken
+from app.tools.base import ToolCall, ToolSpec
 
 #: Roles accepted by the chat protocol. Deliberately the three every
 #: OpenAI-compatible host agrees on.
-Role = Literal["system", "user", "assistant"]
+Role = Literal["system", "user", "assistant", "tool"]
 
 
 class LLMUnavailableError(RuntimeError):
@@ -53,9 +55,31 @@ class ChatMessage:
 
     role: Role
     content: str
+    #: Set on an ``assistant`` message that asked for tools to be run.
+    tool_calls: tuple[ToolCall, ...] = ()
+    #: Set on a ``tool`` message: which call this is the answer to.
+    tool_call_id: str = ""
 
-    def as_dict(self) -> dict[str, str]:
-        return {"role": self.role, "content": self.content}
+    def as_dict(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {"role": self.role, "content": self.content}
+        if self.tool_calls:
+            payload["tool_calls"] = [
+                {
+                    "id": call.id,
+                    "type": "function",
+                    "function": {
+                        "name": call.name,
+                        # The provider wants the arguments as a JSON *string*,
+                        # which is also why they round-trip through a parse on
+                        # the way back in.
+                        "arguments": json.dumps(call.arguments),
+                    },
+                }
+                for call in self.tool_calls
+            ]
+        if self.tool_call_id:
+            payload["tool_call_id"] = self.tool_call_id
+        return payload
 
 
 @dataclass(frozen=True)
@@ -110,6 +134,8 @@ class LLMResult:
     first_token_s: float | None = None
     #: True when the reply is the configured fallback, not model output.
     fallback: bool = False
+    #: Tools the model asked to run, in order. Empty for an ordinary reply.
+    tool_calls: tuple[ToolCall, ...] = ()
     #: Provider-specific detail (kept for debugging; never required by callers).
     raw: Any = None
 
@@ -163,14 +189,26 @@ class LLMEngine(abc.ABC):
     def generate(
         self,
         messages: Sequence[ChatMessage],
+        *,
+        tools: Sequence[ToolSpec] | None = None,
+        max_tokens: int | None = None,
     ) -> LLMResult:
-        """Return the reply to ``messages`` in full."""
+        """Return the reply to ``messages`` in full.
+
+        With ``tools``, the model may answer by asking for one to be run -- in
+        which case ``LLMResult.tool_calls`` is populated and ``text`` is usually
+        empty. Running them and calling again is the caller's job, because only
+        the caller knows what the tools do.
+        """
 
     def stream(
         self,
         messages: Sequence[ChatMessage],
         *,
         cancel: CancelToken | None = None,
+        tools: Sequence[ToolSpec] | None = None,
+        max_tokens: int | None = None,
+        on_tool_calls: Callable[[tuple[ToolCall, ...]], None] | None = None,
     ) -> Iterator[str]:
         """Yield the reply as text deltas, honouring ``cancel`` between chunks.
 
@@ -178,7 +216,15 @@ class LLMEngine(abc.ABC):
         single delta, so a caller that wants incremental output still works
         against a provider that cannot stream -- it just loses the latency win.
         Backends that can stream override this.
+
+        ``on_tool_calls`` is how tool requests come back from a *streaming*
+        call. A generator can only yield one thing, and a turn needs both the
+        text (to speak as it arrives) and any calls (to run before speaking
+        anything) -- an out-parameter keeps the streaming path intact rather
+        than forcing every tool-enabled turn back to a blocking call.
         """
-        result = self.generate(messages)
+        result = self.generate(messages, tools=tools, max_tokens=max_tokens)
+        if result.tool_calls and on_tool_calls is not None:
+            on_tool_calls(result.tool_calls)
         if result.text:
             yield result.text

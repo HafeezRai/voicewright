@@ -32,6 +32,8 @@ def build_pipeline(settings: Settings) -> VoicePipeline:
         build_tts(settings),
         sample_rate=settings.sample_rate_hz,
         chunk_samples=settings.tts_chunk_samples,
+        tool_rounds=settings.llm_tool_rounds,
+        tool_max_tokens=settings.llm_tool_max_tokens,
         system_prompt=settings.llm_system_prompt,
         fallback_reply=settings.llm_fallback_reply,
     )

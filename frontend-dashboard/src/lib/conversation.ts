@@ -6,6 +6,8 @@
  * grows token by token and the timings are filled in later. The wire types
  * describe a finished request; this describes a row on screen.
  */
+import type { ToolInvocation } from "./agents";
+
 export interface ConversationTurn {
   id: number;
   /** What the caller said. Empty until speech-to-text returns. */
@@ -19,6 +21,13 @@ export interface ConversationTurn {
   firstAudioMs: number | null;
   /** Milliseconds for the whole turn. null while still in flight. */
   totalMs: number | null;
+  /**
+   * Tools the agent ran to produce this reply, in order.
+   *
+   * Shown because the difference between an agent that *claims* to have booked
+   * something and one that did is whether you can see the call and its result.
+   */
+  tools: ToolInvocation[];
   /** A note shown under the turn — an interruption, a failure, a rejected echo. */
   error?: string;
   /**
@@ -38,5 +47,6 @@ export function emptyTurn(id: number): ConversationTurn {
     model: "",
     firstAudioMs: null,
     totalMs: null,
+    tools: [],
   };
 }
