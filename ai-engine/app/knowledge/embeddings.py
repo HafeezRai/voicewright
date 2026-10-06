@@ -141,3 +141,18 @@ class EmbeddingModel:
         """Convenience wrapper for a single string: an ``(dim,)`` unit vector."""
         vectors = self.encode([text])
         return vectors[0] if len(vectors) else np.zeros(0, dtype=np.float32)
+
+
+def build_embedder(settings: Any) -> EmbeddingModel:
+    """Construct the configured retrieval encoder (weights load on first use).
+
+    ``settings`` is typed loosely to keep this module free of an ``app.config``
+    import at module scope -- the same reason ``app.llm`` resolves its factory
+    lazily. It is an :class:`~app.config.Settings` in practice; only three
+    fields are read.
+    """
+    return EmbeddingModel(
+        settings.embedding_model,
+        device=settings.device,
+        cache_dir=str(settings.hf_hub_cache),
+    )

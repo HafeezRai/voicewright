@@ -14,6 +14,10 @@
 # --- web / serving -----------------------------------------------------------
 fastapi>=0.110,<1.0
 uvicorn[standard]>=0.29,<1.0
+# Parses multipart/form-data, i.e. the document file-upload endpoint. FastAPI
+# raises at import of a File/Form route without it; the knowledge-base upload is
+# the only consumer.
+python-multipart>=0.0.9,<1.0
 pydantic>=2.6,<3.0
 pydantic-settings>=2.2,<3.0
 python-dotenv>=1.0,<2.0

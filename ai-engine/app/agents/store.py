@@ -28,7 +28,7 @@ from __future__ import annotations
 import logging
 import sqlite3
 import uuid
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
@@ -265,3 +265,114 @@ class AgentStore:
             )
             deleted = cursor.rowcount > 0
         return deleted
+
+    # -- documents and chunks ----------------------------------------------
+    def add_document(
+        self,
+        org_id: str,
+        agent_id: str,
+        *,
+        title: str,
+        source: str,
+        text: str,
+        chunks: Sequence[tuple[str, bytes, int]],
+    ) -> dict[str, Any]:
+        """Store a document and its embedded chunks in one transaction.
+
+        ``chunks`` is a sequence of ``(chunk_text, embedding_bytes, dim)``. The
+        whole insert is atomic: a document is never left half-indexed, which
+        would show up as a document that lists but never retrieves.
+        """
+        doc_id = _new_id()
+        now = _now()
+        with self._write() as conn:
+            conn.execute(
+                """
+                INSERT INTO documents
+                    (id, org_id, agent_id, title, source, char_count, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (doc_id, org_id, agent_id, title, source, len(text), now),
+            )
+            if chunks:
+                conn.executemany(
+                    """
+                    INSERT INTO chunks
+                        (id, org_id, agent_id, document_id, ordinal, text,
+                         embedding, dim, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    [
+                        (_new_id(), org_id, agent_id, doc_id, ordinal, chunk_text, blob, dim, now)
+                        for ordinal, (chunk_text, blob, dim) in enumerate(chunks)
+                    ],
+                )
+        stored = self.get_document(org_id, doc_id)
+        assert stored is not None  # just written
+        return stored
+
+    def get_document(self, org_id: str, document_id: str) -> dict[str, Any] | None:
+        with self._read() as conn:
+            row = conn.execute(
+                """
+                SELECT d.*,
+                       (SELECT COUNT(*) FROM chunks c WHERE c.document_id = d.id) AS chunk_count
+                FROM documents d
+                WHERE d.id = ? AND d.org_id = ?
+                """,
+                (document_id, org_id),
+            ).fetchone()
+        return dict(row) if row else None
+
+    def list_documents(self, org_id: str, agent_id: str) -> list[dict[str, Any]]:
+        with self._read() as conn:
+            rows = conn.execute(
+                """
+                SELECT d.*,
+                       (SELECT COUNT(*) FROM chunks c WHERE c.document_id = d.id) AS chunk_count
+                FROM documents d
+                WHERE d.org_id = ? AND d.agent_id = ?
+                ORDER BY d.created_at, d.id
+                """,
+                (org_id, agent_id),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def delete_document(self, org_id: str, document_id: str) -> bool:
+        """Delete a document and (by cascade) its chunks."""
+        with self._write() as conn:
+            cursor = conn.execute(
+                "DELETE FROM documents WHERE id = ? AND org_id = ?",
+                (document_id, org_id),
+            )
+            deleted = cursor.rowcount > 0
+        return deleted
+
+    def agent_has_documents(self, org_id: str, agent_id: str) -> bool:
+        """Whether the agent has at least one chunk to retrieve from.
+
+        The retrieval fast path: an agent with no chunks is answered from the
+        prompt alone, with the encoder never consulted.
+        """
+        with self._read() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM chunks WHERE org_id = ? AND agent_id = ? LIMIT 1",
+                (org_id, agent_id),
+            ).fetchone()
+        return row is not None
+
+    def list_chunk_vectors(self, org_id: str, agent_id: str) -> list[sqlite3.Row]:
+        """Every chunk of an agent, with its raw vector blob, for scoring.
+
+        Scoped by ``org_id`` and ``agent_id`` so retrieval for one agent can
+        never read another agent's -- or another org's -- chunks.
+        """
+        with self._read() as conn:
+            return conn.execute(
+                """
+                SELECT id, document_id, text, embedding
+                FROM chunks
+                WHERE org_id = ? AND agent_id = ?
+                """,
+                (org_id, agent_id),
+            ).fetchall()

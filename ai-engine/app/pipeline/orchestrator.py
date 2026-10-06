@@ -68,7 +68,7 @@ from __future__ import annotations
 import enum
 import logging
 import time
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -108,6 +108,46 @@ logger = logging.getLogger(__name__)
 #: Errors that mean "the provider did not answer", as opposed to a bug in our
 #: own code. Only these may be swallowed by ``fallback_reply``.
 _LLM_FAILURES = (LLMUnavailableError, LLMTimeoutError)
+
+#: Header for the retrieved-knowledge block spliced into the system message.
+#: The wording carries two instructions that matter for a *voice* agent:
+#: answer only from this material (so the model does not invent a policy), and
+#: never mention the material itself (a caller should not hear "according to my
+#: documents"). "Say you do not know" is the deliberate failure mode -- better a
+#: short admission than a confident fabrication, which is the whole reason to
+#: ground at all.
+_KNOWLEDGE_TEMPLATE = (
+    "Reference material follows. Use it to answer the caller only if it is "
+    "relevant to their question. If it does not contain the answer, say you do "
+    "not know rather than guessing. Answer in your own words and never mention "
+    "the reference material, its source, or that you were given any.\n\n"
+    "{snippets}"
+)
+
+#: Separator between snippets, so the model can tell one policy from the next.
+_KNOWLEDGE_SEPARATOR = "\n---\n"
+
+#: Retrieval is not the pipeline's job -- it is stateless and knows nothing of
+#: orgs or stores. A caller that wants grounding passes a provider; the pipeline
+#: calls it once, with the finished transcript, and splices whatever comes back.
+#: This is the whole coupling between the two: a plain function, called at the
+#: one point where the utterance text is known and the prompt is not yet built.
+KnowledgeProvider = Callable[[str], Sequence[str]]
+
+
+def format_knowledge(snippets: Sequence[str] | None) -> str:
+    """Build the ground-truth block for the system message.
+
+    Returns ``""`` (not a header with no body) when there is nothing relevant,
+    so the ungrounded path leaves the system message byte-identical to what it
+    was before retrieval existed. That is what makes "no documents" cheap and
+    "nothing above threshold" honest: neither adds a word to the prompt.
+    """
+    items = [s.strip() for s in (snippets or []) if s and s.strip()]
+    if not items:
+        return ""
+    return _KNOWLEDGE_TEMPLATE.format(snippets=_KNOWLEDGE_SEPARATOR.join(items))
+
 
 
 class EventKind(enum.StrEnum):
@@ -151,6 +191,8 @@ class TurnResult:
     system_prompt: str = ""
     #: Number of prior messages replayed into the prompt.
     history_turns: int = 0
+    #: How many retrieved knowledge chunks were spliced into the system message.
+    knowledge_chunks: int = 0
     #: Per-stage timings, for the dashboard and for latency accounting.
     timings: dict[str, float] = field(default_factory=dict)
 
@@ -210,9 +252,12 @@ class VoicePipeline:
         *,
         system_prompt: str | None = None,
         history: Sequence[ChatMessage] | None = None,
+        knowledge: Sequence[str] | None = None,
     ) -> LLMResult:
         """Generate one reply, recording LLM metrics."""
-        return self._generate(text, system_prompt=system_prompt, history=history)
+        return self._generate(
+            text, system_prompt=system_prompt, history=history, knowledge=knowledge
+        )
 
     def synthesize(self, text: str, *, speed: float | None = None) -> SynthesisResult:
         """Synthesise one utterance, recording TTS metrics."""
@@ -226,8 +271,15 @@ class VoicePipeline:
         *,
         system_prompt: str | None = None,
         history: Sequence[ChatMessage] | None = None,
+        knowledge_provider: KnowledgeProvider | None = None,
     ) -> TurnResult:
-        """Run one full STT -> LLM -> TTS turn and return the result."""
+        """Run one full STT -> LLM -> TTS turn and return the result.
+
+        ``knowledge_provider`` is called once, with the transcript, and its
+        snippets are spliced into the system message. Retrieval needs the
+        *transcript*, which only exists after STT, so the provider is invoked
+        here rather than owned here -- the pipeline stays ignorant of stores.
+        """
         started = time.perf_counter()
 
         t0 = time.perf_counter()
@@ -238,7 +290,10 @@ class VoicePipeline:
             raise
         stt_s = time.perf_counter() - t0
 
-        return self._turn_from_transcript(transcript, stt_s, started, system_prompt, history)
+        knowledge = knowledge_provider(transcript.text) if knowledge_provider else None
+        return self._turn_from_transcript(
+            transcript, stt_s, started, system_prompt, history, knowledge
+        )
 
     def process_stream(
         self,
@@ -247,6 +302,7 @@ class VoicePipeline:
         *,
         system_prompt: str | None = None,
         history: Sequence[ChatMessage] | None = None,
+        knowledge_provider: KnowledgeProvider | None = None,
     ) -> TurnResult:
         """Buffer an audio chunk stream into one utterance, then run it.
 
@@ -258,7 +314,13 @@ class VoicePipeline:
         audio = np.concatenate(parts) if parts else np.zeros(0, dtype=np.float32)
         logger.debug("ingested %.2fs of audio from %d chunks",
                      duration_s(audio, rate), len(parts))
-        return self.process_turn(audio, rate, system_prompt=system_prompt, history=history)
+        return self.process_turn(
+            audio,
+            rate,
+            system_prompt=system_prompt,
+            history=history,
+            knowledge_provider=knowledge_provider,
+        )
 
     # -- streaming path -----------------------------------------------------
     def stream_turn(
@@ -269,6 +331,7 @@ class VoicePipeline:
         sink: TTSPlaybackSink | None = None,
         system_prompt: str | None = None,
         history: Sequence[ChatMessage] | None = None,
+        knowledge_provider: KnowledgeProvider | None = None,
     ) -> Iterator[PipelineEvent]:
         """Yield the turn as it happens, cutting it off on barge-in.
 
@@ -290,7 +353,8 @@ class VoicePipeline:
         sink.start()
         token: CancelToken = sink.cancel_token
         provider = self._provider()
-        messages = self._build_messages(transcript.text, system_prompt, history)
+        knowledge = knowledge_provider(transcript.text) if knowledge_provider else None
+        messages = self._build_messages(transcript.text, system_prompt, history, knowledge)
         logger.debug("stream turn: stt=%.3fs provider=%s", stt_s, provider)
 
         segmenter = SentenceSegmenter()
@@ -410,15 +474,21 @@ class VoicePipeline:
         text: str,
         system_prompt: str | None,
         history: Sequence[ChatMessage] | None,
+        knowledge: Sequence[str] | None = None,
     ) -> list[ChatMessage]:
         """Assemble the prompt: system, then replayed turns, then the utterance.
 
-        The single seam step 2's retrieval splices into: retrieved snippets
-        become another system message (or are appended to the existing one)
-        without anything else in this class changing.
+        The single seam step 2's retrieval splices into. Retrieved snippets are
+        appended to the *existing* system message rather than sent as a second
+        one: a model treats one system turn more reliably than two, and the
+        persona and its grounding belong together. When there is no knowledge
+        (the common case) the system message is byte-identical to before.
         """
         messages: list[ChatMessage] = []
         prompt = self._system_prompt_for(system_prompt)
+        block = format_knowledge(knowledge)
+        if block:
+            prompt = f"{prompt}\n\n{block}" if prompt else block
         if prompt:
             messages.append(ChatMessage(role="system", content=prompt))
         if history:
@@ -432,9 +502,10 @@ class VoicePipeline:
         *,
         system_prompt: str | None,
         history: Sequence[ChatMessage] | None,
+        knowledge: Sequence[str] | None = None,
     ) -> LLMResult:
         provider = self._provider()
-        messages = self._build_messages(text, system_prompt, history)
+        messages = self._build_messages(text, system_prompt, history, knowledge)
         started = time.perf_counter()
         try:
             result = self.llm.generate(messages)
@@ -510,9 +581,15 @@ class VoicePipeline:
         started: float,
         system_prompt: str | None,
         history: Sequence[ChatMessage] | None,
+        knowledge: Sequence[str] | None = None,
     ) -> TurnResult:
         t1 = time.perf_counter()
-        llm_result = self._generate(transcript.text, system_prompt=system_prompt, history=history)
+        llm_result = self._generate(
+            transcript.text,
+            system_prompt=system_prompt,
+            history=history,
+            knowledge=knowledge,
+        )
         llm_s = time.perf_counter() - t1
 
         t2 = time.perf_counter()
@@ -533,5 +610,6 @@ class VoicePipeline:
             total_latency_s=total,
             system_prompt=self._system_prompt_for(system_prompt),
             history_turns=len(history) if history else 0,
+            knowledge_chunks=len([s for s in (knowledge or []) if s and s.strip()]),
             timings={"stt": stt_s, "llm": llm_s, "tts": tts_s, "total": total},
         )

@@ -156,10 +156,14 @@ class Settings(BaseSettings):
     knowledge_top_k: int = Field(default=3, ge=1, le=20, alias="AI_ENGINE_KNOWLEDGE_TOP_K")
     #: Minimum cosine similarity a chunk must reach to be injected. The point is
     #: the *empty* case: injecting the three best chunks on a query they do not
-    #: answer makes the reply worse, not better. MiniLM puts related sentences
-    #: around 0.4-0.6 and unrelated ones below 0.2; 0.35 sits in the gap.
+    #: answer makes the reply worse, not better. Measured with MiniLM on
+    #: question-vs-statement pairs (not sentence-vs-sentence): a question the
+    #: chunk answers scores ~0.85, an unrelated question still scores ~0.35 --
+    #: MiniLM's cosine floor between two English sentences is high, so the old
+    #: "unrelated is below 0.2" rule of thumb does not hold here. 0.4 clears the
+    #: unrelated band with margin while leaving the relevant band untouched.
     knowledge_min_score: float = Field(
-        default=0.35, ge=-1.0, le=1.0, alias="AI_ENGINE_KNOWLEDGE_MIN_SCORE"
+        default=0.4, ge=-1.0, le=1.0, alias="AI_ENGINE_KNOWLEDGE_MIN_SCORE"
     )
     #: Hard cap on a single pasted/uploaded document, so one request cannot
     #: fill the process's memory or the store.

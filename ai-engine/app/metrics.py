@@ -108,6 +108,29 @@ PIPELINE_LATENCY = Histogram(
     buckets=_LATENCY_BUCKETS,
 )
 
+# --- knowledge base / retrieval ---------------------------------------------
+#: One increment per turn that *looked*: ``status`` is ``ok`` (retrieval ran,
+#: injected or not), ``empty`` (the agent has no documents, so it was skipped
+#: entirely) or ``error`` (embedder unavailable; the turn proceeded ungrounded).
+#: Worth its own counter because "how often is grounding actually happening" is
+#: otherwise invisible -- a silent ``empty`` on every turn looks identical to a
+#: knowledge base that works.
+KNOWLEDGE_RETRIEVALS = Counter(
+    "cloudpso_ai_knowledge_retrievals_total",
+    "Retrieval attempts per turn, labelled by outcome (ok|empty|error).",
+    ["status"],
+)
+KNOWLEDGE_RETRIEVAL_LATENCY = Histogram(
+    "cloudpso_ai_knowledge_retrieval_latency_seconds",
+    "Wall-clock time to embed the utterance and rank the agent's chunks.",
+    buckets=_LATENCY_BUCKETS,
+)
+KNOWLEDGE_CHUNKS_RETURNED = Histogram(
+    "cloudpso_ai_knowledge_chunks_returned",
+    "Chunks that cleared the similarity threshold and were injected, per turn.",
+    buckets=(0, 1, 2, 3, 4, 5, 8, 16),
+)
+
 # --- gRPC --------------------------------------------------------------------
 GRPC_FRAMES = Counter(
     "cloudpso_ai_grpc_audio_frames_total",
