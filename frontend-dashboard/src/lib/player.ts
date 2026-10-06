@@ -13,6 +13,15 @@
  * on its own and the next chunk simply starts immediately.
  */
 export class ProgressivePlayer {
+  /**
+   * Fired when the queue drains and the agent has stopped speaking.
+   *
+   * The end of playback is what closes the window in which the microphone can
+   * pick up the agent's own voice — see `looksLikeEcho`. Not fired by `stop()`,
+   * which is a deliberate cut-off the caller already knows about.
+   */
+  onIdle?: () => void;
+
   private ctx: AudioContext | null = null;
   private nextStart = 0;
   private sources = new Set<AudioBufferSourceNode>();
@@ -68,7 +77,10 @@ export class ProgressivePlayer {
     this.scheduled += 1;
 
     this.sources.add(source);
-    source.onended = () => this.sources.delete(source);
+    source.onended = () => {
+      this.sources.delete(source);
+      if (this.sources.size === 0) this.onIdle?.();
+    };
   }
 
   /** Stop everything immediately (barge-in, or the user leaving). */

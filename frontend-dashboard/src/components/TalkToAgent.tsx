@@ -8,6 +8,7 @@ import {
   streamAgentTurn,
 } from "../lib/agents";
 import { MIC_CONSTRAINTS, PcmCapture, resampleToMonoWav } from "../lib/audio";
+import { looksLikeEcho } from "../lib/echo";
 import { ProgressivePlayer } from "../lib/player";
 import { TurnDetector } from "../lib/vad";
 import { StatusPill } from "./StatusPill";
@@ -65,6 +66,12 @@ export function TalkToAgent({ agent }: { agent: Agent }) {
   const [results, setResults] = useState<Result[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
   const [level, setLevel] = useState<{ rms: number; phase: string }>({ rms: 0, phase: "idle" });
+  //: What the browser actually granted, which is not always what was asked for.
+  const [processing, setProcessing] = useState<{
+    echoCancellation: boolean;
+    noiseSuppression: boolean;
+    autoGainControl: boolean;
+  } | null>(null);
 
   const captureRef = useRef<PcmCapture | null>(null);
   const micRef = useRef<MediaStream | null>(null);
@@ -74,6 +81,11 @@ export function TalkToAgent({ agent }: { agent: Agent }) {
   const abortRef = useRef<AbortController | null>(null);
   const nextId = useRef(1);
   const inCallRef = useRef(false);
+  //: The agent's most recent utterance -- what the microphone might pick back up.
+  const agentSpeechRef = useRef<{ text: string; endedAt: number | null }>({
+    text: "",
+    endedAt: null,
+  });
 
   const patch = useCallback((id: number, update: Partial<Result>) => {
     setResults((prev) => prev.map((row) => (row.id === id ? { ...row, ...update } : row)));
@@ -143,6 +155,9 @@ export function TalkToAgent({ agent }: { agent: Agent }) {
       let firstAudio = -1;
       let reply = "";
       let rowCreated = announce;
+      //: Set when the transcript turned out to be the agent's own voice, so the
+      //: resulting abort is not reported as an interruption.
+      let rejectedAsEcho = false;
       const ensureRow = () => {
         if (rowCreated) return;
         rowCreated = true;
@@ -164,12 +179,28 @@ export function TalkToAgent({ agent }: { agent: Agent }) {
           {
             onTranscript: (text) => {
               ensureRow();
+              // The agent hearing itself is not a user turn. Recognising it
+              // here means the reply to it is never generated or spoken.
+              if (looksLikeEcho(text, agentSpeechRef.current, performance.now())) {
+                rejectedAsEcho = true;
+                patch(id, {
+                  transcript: text,
+                  reply: "",
+                  error: "ignored — that was my own voice coming back through the mic",
+                  totalMs: Math.round(performance.now() - t0),
+                });
+                controller.abort();
+                return;
+              }
               patch(id, { transcript: text });
             },
             onDelta: (text) => {
               ensureRow();
               reply += text;
               patch(id, { reply });
+              // Track what is about to be spoken, so the next transcript can be
+              // checked against it.
+              agentSpeechRef.current = { text: reply, endedAt: null };
             },
             onAudio: (pcm16, sampleRate) => {
               ensureRow();
@@ -178,6 +209,8 @@ export function TalkToAgent({ agent }: { agent: Agent }) {
                 patch(id, { firstAudioMs: Math.round(firstAudio) });
                 setCallState("speaking");
               }
+              // Audio is going out, so the echo window is open again.
+              agentSpeechRef.current = { text: agentSpeechRef.current.text, endedAt: null };
               try {
                 player.push(pcm16, sampleRate || 16000);
               } catch (error) {
@@ -186,6 +219,7 @@ export function TalkToAgent({ agent }: { agent: Agent }) {
             },
             onDone: (result) => {
               ensureRow();
+              agentSpeechRef.current = { text: result.replyText || reply, endedAt: null };
               patch(id, {
                 reply: result.replyText || reply,
                 model: result.model,
@@ -196,6 +230,7 @@ export function TalkToAgent({ agent }: { agent: Agent }) {
             },
             onCancelled: (result) => {
               ensureRow();
+              if (rejectedAsEcho) return;
               patch(id, {
                 reply: result.replyText || reply,
                 model: result.model,
@@ -257,6 +292,23 @@ export function TalkToAgent({ agent }: { agent: Agent }) {
       // Echo cancellation and noise suppression are requested here because
       // without them the agent hears itself and treats room noise as speech.
       const stream = await navigator.mediaDevices.getUserMedia(MIC_CONSTRAINTS);
+
+      // Ask what was actually granted. Browsers are free to ignore a constraint
+      // and say nothing, so a machine that silently refused noise suppression
+      // looks identical to one where it is on -- until the agent starts
+      // answering its own voice.
+      const applied = stream.getAudioTracks()[0]?.getSettings();
+      setProcessing({
+        echoCancellation: applied?.echoCancellation ?? false,
+        noiseSuppression: applied?.noiseSuppression ?? false,
+        autoGainControl: applied?.autoGainControl ?? false,
+      });
+      const player = ensurePlayer();
+      player.onIdle = () => {
+        if (agentSpeechRef.current.endedAt === null) {
+          agentSpeechRef.current = { ...agentSpeechRef.current, endedAt: performance.now() };
+        }
+      };
       micRef.current = stream;
       inCallRef.current = true;
 
@@ -296,7 +348,7 @@ export function TalkToAgent({ agent }: { agent: Agent }) {
       setNotice(`Microphone unavailable: ${describe(error)}`);
       teardown();
     }
-  }, [beginCapture, endCapture, teardown]);
+  }, [beginCapture, endCapture, ensurePlayer, teardown]);
 
   // --- push-to-talk (batch mode) -------------------------------------------
 
@@ -501,6 +553,29 @@ export function TalkToAgent({ agent }: { agent: Agent }) {
           <span className="w-20 font-mono text-[10px] text-cloudpso-muted" data-testid="mic-level">
             {level.phase} {level.rms.toFixed(3)}
           </span>
+          {processing && (
+            <span
+              className="font-mono text-[10px] text-cloudpso-muted"
+              data-testid="mic-processing"
+              title="Echo cancellation / noise suppression / auto gain, as granted by the browser"
+            >
+              {["ec", "ns", "agc"]
+                .map((name, index) => {
+                  const granted = [
+                    processing.echoCancellation,
+                    processing.noiseSuppression,
+                    processing.autoGainControl,
+                  ][index];
+                  return (
+                    <span key={name} className={granted ? "text-cloudpso-ok" : "text-cloudpso-err"}>
+                      {granted ? "✓" : "✗"}
+                      {name}
+                    </span>
+                  );
+                })
+                .reduce<React.ReactNode[]>((acc, node, index) => (index ? [...acc, " ", node] : [node]), [])}
+            </span>
+          )}
         </div>
       )}
 
