@@ -83,16 +83,34 @@ function offline(error: string): ServiceMetrics {
   return { online: false, error, fetchedAt: Date.now() };
 }
 
-/** Sum of a counter across every label set whose `status` is not a success. */
+/**
+ * Statuses that mean a stage genuinely failed.
+ *
+ * An allow-list rather than "anything that isn't ok", because the pipeline also
+ * reports outcomes that are perfectly normal:
+ *   - `empty`     — a knowledge-base query matched nothing above the threshold
+ *   - `cancelled` — the user barged in, which is the feature working
+ * Counting those as errors makes a healthy system look broken.
+ */
+const ERROR_STATUSES = new Set(["error", "fallback"]);
+
+/**
+ * Failed requests across both services.
+ *
+ * Two filters, and both have bitten:
+ *  1. Only `*_total` counters count. `prometheus_client` also exports a
+ *     `*_created` series per counter whose *value is a Unix timestamp*, so an
+ *     unfiltered sum reports ~1.8 billion "errors" on a healthy system.
+ *  2. Only statuses in ERROR_STATUSES count.
+ */
 function errorTotal(...parsed: (ParsedMetrics | undefined)[]): number {
   let total = 0;
   for (const p of parsed) {
     if (!p) continue;
     for (const sample of p.samples) {
+      if (!sample.name.endsWith("_total")) continue;
       const status = sample.labels.status;
-      if (status !== undefined && status !== "ok" && status !== "success") {
-        total += sample.value;
-      }
+      if (status !== undefined && ERROR_STATUSES.has(status)) total += sample.value;
     }
   }
   return total;

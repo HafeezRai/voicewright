@@ -153,6 +153,9 @@ describe("App — voice client integration", () => {
     const user = userEvent.setup();
     render(<App />);
 
+    // The builder is the default view; the WebRTC session lives on its own tab.
+    await user.click(screen.getByTestId("tab-session"));
+
     expect(screen.getByTestId("voice-status")).toHaveTextContent("Idle");
 
     await user.click(screen.getByTestId("start-call"));

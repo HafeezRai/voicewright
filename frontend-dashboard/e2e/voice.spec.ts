@@ -26,6 +26,8 @@ test("browser mic negotiates WebRTC with backend-core and reaches connected", as
   });
 
   await page.goto("/");
+  // The app opens on the agent builder; the WebRTC session is its own view.
+  await page.getByTestId("tab-session").click();
   await expect(page.getByTestId("voice-status")).toHaveText("Idle");
 
   // The dashboard reaches BOTH services cross-origin from the browser — this is
@@ -60,6 +62,7 @@ test("browser mic negotiates WebRTC with backend-core and reaches connected", as
 
 test("browser speech interrupts the agent (barge-in over the media path)", async ({ page }) => {
   await page.goto("/");
+  await page.getByTestId("tab-session").click();
   await page.getByTestId("start-call").click();
 
   await expect
