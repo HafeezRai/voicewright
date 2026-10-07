@@ -408,7 +408,11 @@ class VoicePipeline:
         # re-arms the token: a stop() before this point would be silently undone.
         sink.start()
         token: CancelToken = sink.cancel_token
-        provider = self._provider()
+        # Which engine is *actually* doing the thinking. An agent can override
+        # the provider and model, so reporting the pipeline's own engine here
+        # mislabels every metric and every caption on a hosted-only turn.
+        active = llm or self.llm
+        provider = active.provider or self._provider()
         knowledge = knowledge_provider(transcript.text) if knowledge_provider else None
         messages = self._build_messages(transcript.text, system_prompt, history, knowledge)
         logger.debug("stream turn: stt=%.3fs provider=%s", stt_s, provider)
@@ -520,7 +524,7 @@ class VoicePipeline:
 
         # Caption material for whichever terminal event this turn produces.
         grounded_chunks = len([s for s in (knowledge or []) if s and s.strip()])
-        model_name = getattr(self.llm, "model", "") or ""
+        model_name = getattr(active, "model", "") or ""
 
         if cancelled:
             LLM_CANCELLED.labels(provider=provider).inc()

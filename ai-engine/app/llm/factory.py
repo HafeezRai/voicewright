@@ -56,9 +56,19 @@ def resolve_api_key(settings: Settings, provider: str | None = None) -> str | No
     Never logged, never echoed into an error.
     """
     name = (provider or settings.llm_provider or "").strip().lower()
-    # Settings first (which covers both an explicit AI_ENGINE_LLM_API_KEY and
-    # the conventional variable via `.env`), then the live environment, so
-    # exporting the usual variable works without any configuration at all.
+    # Precedence, most specific first.
+    #
+    # 1. AI_ENGINE_LLM_API_KEY is *this deployment's* key for its own provider.
+    #    It is the most deliberate statement anyone can make, and it must beat
+    #    an inherited DEEPSEEK_API_KEY -- otherwise exporting a key for one
+    #    experiment silently overrides the configured one.
+    if name == (settings.llm_provider or "").strip().lower() and settings.llm_api_key:
+        value = settings.llm_api_key.get_secret_value().strip()
+        if value:
+            return value
+    # 2. The provider's own key, declared as a setting (so `.env` can carry it)
+    #    or exported under its conventional name. This is what lets one agent
+    #    use a hosted provider the deployment is not otherwise configured for.
     declared = getattr(settings, f"{name}_api_key", None)
     if declared is not None:
         value = declared.get_secret_value().strip()
@@ -69,7 +79,8 @@ def resolve_api_key(settings: Settings, provider: str | None = None) -> str | No
         value = os.environ.get(env_name, "").strip()
         if value:
             return value
-    if name == (settings.llm_provider or "").strip().lower() and settings.llm_api_key:
+    # 3. Anything else configured, as a last resort.
+    if settings.llm_api_key:
         return settings.llm_api_key.get_secret_value()
     return None
 
