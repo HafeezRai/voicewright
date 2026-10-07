@@ -14,6 +14,7 @@ send the demo to the wrong host.
 from __future__ import annotations
 
 import os
+from urllib.parse import urlparse
 
 from app.config import Settings
 from app.llm.base import PROVIDER_API_KEY_ENV, LLMEngine, LLMUnavailableError
@@ -48,6 +49,31 @@ def resolve_base_url(settings: Settings, provider: str | None = None) -> str:
         f"unknown LLM provider {name!r} and no AI_ENGINE_LLM_BASE_URL set; "
         f"known providers: {known}"
     )
+
+
+#: Loopback hosts answer in about a millisecond or not at all.
+_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1", ""})
+
+#: Floor for a connect timeout to a host off this machine.
+_REMOTE_CONNECT_TIMEOUT_S = 10.0
+
+
+def resolve_connect_timeout(settings: Settings, base_url: str, override: float | None = None) -> float:
+    """How long to wait for the connection itself.
+
+    The configured default (2s) is tuned for a local model, where a refusal
+    means "Ollama is not running" and the caller should hear that quickly. It is
+    far too tight across the public internet: a hosted API that takes three
+    seconds to complete a TLS handshake is up and healthy, and a 2s ceiling
+    turns it into a failed turn. Measured here -- one DeepSeek turn in a handful
+    died with ConnectTimeout while Ollama never did.
+    """
+    if override is not None:
+        return override
+    host = (urlparse(base_url).hostname or "").lower()
+    if host in _LOOPBACK_HOSTS:
+        return settings.llm_connect_timeout_s
+    return max(settings.llm_connect_timeout_s, _REMOTE_CONNECT_TIMEOUT_S)
 
 
 def resolve_api_key(settings: Settings, provider: str | None = None) -> str | None:
@@ -106,7 +132,7 @@ def build_llm(
         temperature=settings.llm_temperature,
         max_tokens=settings.llm_max_tokens,
         timeout_s=settings.llm_timeout_s,
-        connect_timeout_s=settings.llm_connect_timeout_s,
+        connect_timeout_s=resolve_connect_timeout(settings, resolve_base_url(settings, provider)),
         stream=settings.llm_stream,
         extra_body=settings.llm_extra_body,
         allow_reasoning_models=settings.llm_allow_reasoning_models,
