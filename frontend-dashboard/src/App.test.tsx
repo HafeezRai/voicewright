@@ -142,7 +142,7 @@ describe("App — observability dashboard", () => {
 
     await waitFor(() => expect(screen.getAllByTestId("svc-offline")).toHaveLength(2));
     // The page is still fully rendered.
-    expect(screen.getByText("CloudPSO")).toBeInTheDocument();
+    expect(screen.getByText("Voicewright")).toBeInTheDocument();
     expect(screen.getByTestId("dashboard")).toBeInTheDocument();
   });
 });

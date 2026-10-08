@@ -1,6 +1,6 @@
 # ai-engine — STT → LLM → TTS
 
-The Phase 3 speech pipeline for the CloudPSO Voice Agent. It transcribes audio,
+The Phase 3 speech pipeline for the Voicewright Voice Agent. It transcribes audio,
 *generates* a spoken-style reply with a generative LLM, and synthesises it to
 speech.
 
@@ -25,7 +25,7 @@ audio ──► STT (faster-whisper / CTranslate2)
 | Path | Purpose |
 |---|---|
 | `app/config.py` | Validated settings; `models_root`, `hf_home`, `hf_hub_cache` |
-| `app/metrics.py` | Prometheus series (`cloudpso_ai_*`) |
+| `app/metrics.py` | Prometheus series (`voicewright_ai_*`) |
 | `app/audio_io.py` | WAV / PCM helpers (no scipy) |
 | `app/stt/` | `STTEngine` + faster-whisper backend |
 | `app/llm/` | `LLMEngine` + the OpenAI-compatible streaming client, factory, prompts, bounded history |
@@ -76,7 +76,7 @@ multi-gigabyte load is paid before the first caller arrives without ever delayin
 ## Serving
 
 * `GET /health` → `{"status":"ok","service":"ai-engine"}` (frozen since Phase 1)
-* `GET /metrics` → Prometheus exposition, `cloudpso_ai_*` series
+* `GET /metrics` → Prometheus exposition, `voicewright_ai_*` series
 * `POST /stt` (WAV body) · `POST /llm` (JSON) · `POST /tts` (JSON → WAV) ·
   `POST /pipeline` (WAV → transcript + generated reply + reply audio)
 * gRPC `VoiceGateway/StreamAudio` + `Health` on port 50052
@@ -145,7 +145,7 @@ stage needs, so the models chosen here can actually get there.
   of the box.
 * **The LLM is the latency budget.** A generative reply is seconds, not the tens
   of milliseconds the old intent classifier cost. `AI_ENGINE_LLM_MAX_TOKENS`
-  (default 160) is the cheapest lever; `cloudpso_ai_llm_first_token_seconds` is
+  (default 160) is the cheapest lever; `voicewright_ai_llm_first_token_seconds` is
   the series that says whether the agent feels responsive.
 * `faster-whisper`'s language field is set to `en` for `*.en` models by
   construction, so `language_probability` is not meaningful there.

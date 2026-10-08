@@ -1,4 +1,4 @@
-# Triton Inference Server for the CloudPSO ai-engine models.
+# Triton Inference Server for the Voicewright ai-engine models.
 #
 # NOT RUN by this repository's verification: the verify host is arm64 macOS with
 # no NVIDIA GPU, so the nvcr.io Triton image cannot start (it requires the

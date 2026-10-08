@@ -1,4 +1,4 @@
-"""CloudPSO Voice Agent — ai-engine application package.
+"""Voicewright Voice Agent — ai-engine application package.
 
 Phase 1 scope: importable app skeleton + configuration layer only.
 The STT -> LLM -> TTS pipeline is Phase 3 work.

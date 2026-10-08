@@ -8,10 +8,10 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: cloudpso
-  namespace: cloudpso
+  name: voicewright
+  namespace: voicewright
   labels:
-    app.kubernetes.io/part-of: cloudpso-voice-agent
+    app.kubernetes.io/part-of: voicewright-voice-agent
   annotations:
     nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"   # long-lived WSS
     nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
@@ -19,10 +19,10 @@ metadata:
 spec:
   ingressClassName: nginx
   tls:
-    - hosts: ["voice.cloudpso.example"]
-      secretName: cloudpso-tls
+    - hosts: ["voice.voicewright.example"]
+      secretName: voicewright-tls
   rules:
-    - host: voice.cloudpso.example
+    - host: voice.voicewright.example
       http:
         paths:
           - path: /

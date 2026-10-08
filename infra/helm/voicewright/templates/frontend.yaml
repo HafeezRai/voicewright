@@ -2,22 +2,22 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "cloudpso.fullname" . }}-frontend-dashboard
+  name: {{ include "voicewright.fullname" . }}-frontend-dashboard
   labels:
-    {{- include "cloudpso.componentLabels" (dict "ctx" $ "component" "frontend-dashboard") | nindent 4 }}
+    {{- include "voicewright.componentLabels" (dict "ctx" $ "component" "frontend-dashboard") | nindent 4 }}
 spec:
   replicas: {{ .Values.frontend.replicaCount }}
   selector:
     matchLabels:
-      {{- include "cloudpso.selectorLabels" . | nindent 6 }}
+      {{- include "voicewright.selectorLabels" . | nindent 6 }}
       app.kubernetes.io/component: frontend-dashboard
   template:
     metadata:
       labels:
-        {{- include "cloudpso.selectorLabels" . | nindent 8 }}
+        {{- include "voicewright.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: frontend-dashboard
     spec:
-      {{- include "cloudpso.imagePullSecrets" . | nindent 6 }}
+      {{- include "voicewright.imagePullSecrets" . | nindent 6 }}
       securityContext:
         runAsNonRoot: true
         runAsUser: 101          # nginx user in the alpine image
@@ -55,13 +55,13 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "cloudpso.fullname" . }}-frontend-dashboard
+  name: {{ include "voicewright.fullname" . }}-frontend-dashboard
   labels:
-    {{- include "cloudpso.componentLabels" (dict "ctx" $ "component" "frontend-dashboard") | nindent 4 }}
+    {{- include "voicewright.componentLabels" (dict "ctx" $ "component" "frontend-dashboard") | nindent 4 }}
 spec:
   type: {{ .Values.frontend.service.type }}
   selector:
-    {{- include "cloudpso.selectorLabels" . | nindent 4 }}
+    {{- include "voicewright.selectorLabels" . | nindent 4 }}
     app.kubernetes.io/component: frontend-dashboard
   ports:
     - name: http

@@ -1,11 +1,11 @@
 {{/* Common name/label helpers. Kept to the conventional Helm set so the chart
      behaves like any other and `helm lint`'s naming checks are meaningful. */}}
 
-{{- define "cloudpso.name" -}}
+{{- define "voicewright.name" -}}
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
-{{- define "cloudpso.fullname" -}}
+{{- define "voicewright.fullname" -}}
 {{- if .Values.fullnameOverride }}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
 {{- else }}
@@ -18,14 +18,14 @@
 {{- end }}
 {{- end }}
 
-{{- define "cloudpso.chart" -}}
+{{- define "voicewright.chart" -}}
 {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/* Labels shared by every resource. */}}
-{{- define "cloudpso.labels" -}}
-helm.sh/chart: {{ include "cloudpso.chart" . }}
-{{ include "cloudpso.selectorLabels" . }}
+{{- define "voicewright.labels" -}}
+helm.sh/chart: {{ include "voicewright.chart" . }}
+{{ include "voicewright.selectorLabels" . }}
 {{- if .Chart.AppVersion }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
@@ -34,20 +34,20 @@ app.kubernetes.io/part-of: {{ .Values.global.partOf }}
 {{- end }}
 
 {{/* Selector labels -- must be stable across upgrades, so only name+instance. */}}
-{{- define "cloudpso.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "cloudpso.name" . }}
+{{- define "voicewright.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "voicewright.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
-Per-component labels. Usage: {{ include "cloudpso.componentLabels" (dict "ctx" $ "component" "backend-core") }}
+Per-component labels. Usage: {{ include "voicewright.componentLabels" (dict "ctx" $ "component" "backend-core") }}
 */}}
-{{- define "cloudpso.componentLabels" -}}
-{{ include "cloudpso.labels" .ctx }}
+{{- define "voicewright.componentLabels" -}}
+{{ include "voicewright.labels" .ctx }}
 app.kubernetes.io/component: {{ .component }}
 {{- end }}
 
-{{- define "cloudpso.imagePullSecrets" -}}
+{{- define "voicewright.imagePullSecrets" -}}
 {{- with .Values.image.pullSecrets }}
 imagePullSecrets:
 {{- toYaml . | nindent 2 }}
@@ -58,7 +58,7 @@ imagePullSecrets:
 The Secret name holding runtime credentials: the operator's existing Secret, or
 the one this chart creates when secrets.create is true.
 */}}
-{{- define "cloudpso.secretName" -}}
-{{- if .Values.secrets.create }}{{ include "cloudpso.fullname" . }}-secrets
+{{- define "voicewright.secretName" -}}
+{{- if .Values.secrets.create }}{{ include "voicewright.fullname" . }}-secrets
 {{- else }}{{ .Values.secrets.existingSecret }}{{- end }}
 {{- end }}

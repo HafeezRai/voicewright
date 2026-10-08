@@ -53,7 +53,7 @@ export function TimeSeriesChart({
 
   return (
     <div data-testid={testId}>
-      <div className="flex items-center gap-3 pb-1 text-[11px] text-cloudpso-muted">
+      <div className="flex items-center gap-3 pb-1 text-[11px] text-voicewright-muted">
         {series.map((s) => (
           <span key={s.key} className="inline-flex items-center gap-1.5">
             <span className="h-2 w-2 rounded-full" style={{ background: s.color }} />
@@ -70,7 +70,7 @@ export function TimeSeriesChart({
         </span>
       </div>
       <div
-        className="relative rounded-lg border border-cloudpso-line bg-cloudpso-panel2"
+        className="relative rounded-lg border border-voicewright-line bg-voicewright-panel2"
         style={{ height }}
       >
         {hasData ? (
@@ -107,7 +107,7 @@ export function TimeSeriesChart({
             ))}
           </svg>
         ) : (
-          <div className="flex h-full items-center justify-center text-xs text-cloudpso-muted">
+          <div className="flex h-full items-center justify-center text-xs text-voicewright-muted">
             {emptyHint}
           </div>
         )}

@@ -18,7 +18,7 @@ const TABS: { id: View; label: string; hint: string }[] = [
 ];
 
 /**
- * CloudPSO — a voice agent console.
+ * Voicewright — a voice agent console.
  *
  * Laid out the way a playground has to be: the conversation is the page, and
  * everything you can change about the agent sits to its left. The alternative —
@@ -32,12 +32,12 @@ export default function App() {
   const metrics = useMetrics();
 
   return (
-    <div className="flex h-screen flex-col bg-cloudpso-bg text-slate-100">
-      <header className="shrink-0 border-b border-cloudpso-line bg-cloudpso-panel/70 backdrop-blur">
+    <div className="flex h-screen flex-col bg-voicewright-bg text-slate-100">
+      <header className="shrink-0 border-b border-voicewright-line bg-voicewright-panel/70 backdrop-blur">
         <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3">
           <div className="flex items-baseline gap-3">
-            <h1 className="text-base font-semibold text-cloudpso-accent">CloudPSO</h1>
-            <p className="text-xs text-cloudpso-muted">
+            <h1 className="text-base font-semibold text-voicewright-accent">Voicewright</h1>
+            <p className="text-xs text-voicewright-muted">
               Build a voice agent by configuration, then talk to it.
             </p>
           </div>
@@ -52,15 +52,15 @@ export default function App() {
                 onClick={() => setView(tab.id)}
                 className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${
                   view === tab.id
-                    ? "bg-cloudpso-accent/15 text-cloudpso-accent"
-                    : "text-cloudpso-muted hover:text-slate-100"
+                    ? "bg-voicewright-accent/15 text-voicewright-accent"
+                    : "text-voicewright-muted hover:text-slate-100"
                 }`}
               >
                 {tab.label}
               </button>
             ))}
           </nav>
-          <div className="flex gap-4 font-mono text-[10px] text-cloudpso-muted">
+          <div className="flex gap-4 font-mono text-[10px] text-voicewright-muted">
             <span title="backend-core base URL">backend {config.backendUrl}</span>
             <span title="ai-engine base URL">ai {config.aiEngineUrl}</span>
           </div>
@@ -79,8 +79,8 @@ export default function App() {
               // started it, and switching mid-call must not carry state over.
               <TalkToAgent key={agent.id} agent={agent} />
             ) : (
-              <section className="flex items-center justify-center rounded-2xl border border-dashed border-cloudpso-line">
-                <p className="max-w-xs text-center text-sm text-cloudpso-muted">
+              <section className="flex items-center justify-center rounded-2xl border border-dashed border-voicewright-line">
+                <p className="max-w-xs text-center text-sm text-voicewright-muted">
                   Create an agent on the left — or start from an example — and the
                   conversation appears here.
                 </p>

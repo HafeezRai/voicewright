@@ -1,12 +1,12 @@
 # Staging overlay: smaller footprint, one replica of everything, no GPU.
-#   helm install cloudpso-staging infra/helm/cloudpso -f infra/helm/cloudpso/values-staging.yaml
+#   helm install voicewright-staging infra/helm/voicewright -f infra/helm/voicewright/values-staging.yaml
 global:
   environment: staging
   imagePullPolicy: Always        # staging tracks the newest pushed tag
 
 config:
   logLevel: DEBUG
-  corsAllowOrigins: "https://voice.staging.cloudpso.example"
+  corsAllowOrigins: "https://voice.staging.voicewright.example"
 
 backendCore:
   replicaCount: 1
@@ -36,6 +36,6 @@ triton:
   enabled: false
 
 ingress:
-  host: voice.staging.cloudpso.example
+  host: voice.staging.voicewright.example
   tls:
-    secretName: cloudpso-staging-tls
+    secretName: voicewright-staging-tls

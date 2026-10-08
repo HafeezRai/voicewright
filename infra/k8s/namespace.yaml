@@ -1,4 +1,4 @@
-# Namespace for the CloudPSO Voice Agent stack.
+# Namespace for the Voicewright Voice Agent stack.
 #
 # Pod Security Admission is set to `restricted`, which this repo's workloads
 # satisfy (see securityContext in each Deployment): non-root, read-only root
@@ -8,9 +8,9 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: cloudpso
+  name: voicewright
   labels:
-    app.kubernetes.io/part-of: cloudpso-voice-agent
+    app.kubernetes.io/part-of: voicewright-voice-agent
     pod-security.kubernetes.io/enforce: restricted
     pod-security.kubernetes.io/enforce-version: latest
     pod-security.kubernetes.io/audit: restricted

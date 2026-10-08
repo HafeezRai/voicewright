@@ -2,14 +2,14 @@
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
-  name: {{ include "cloudpso.fullname" . }}-backend-core
+  name: {{ include "voicewright.fullname" . }}-backend-core
   labels:
-    {{- include "cloudpso.componentLabels" (dict "ctx" $ "component" "backend-core") | nindent 4 }}
+    {{- include "voicewright.componentLabels" (dict "ctx" $ "component" "backend-core") | nindent 4 }}
 spec:
   minAvailable: {{ .Values.backendCore.podDisruptionBudget.minAvailable }}
   selector:
     matchLabels:
-      {{- include "cloudpso.selectorLabels" . | nindent 6 }}
+      {{- include "voicewright.selectorLabels" . | nindent 6 }}
       app.kubernetes.io/component: backend-core
 {{- end }}
 {{- if and .Values.aiEngine.enabled .Values.aiEngine.podDisruptionBudget.enabled }}
@@ -17,14 +17,14 @@ spec:
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
-  name: {{ include "cloudpso.fullname" . }}-ai-engine
+  name: {{ include "voicewright.fullname" . }}-ai-engine
   labels:
-    {{- include "cloudpso.componentLabels" (dict "ctx" $ "component" "ai-engine") | nindent 4 }}
+    {{- include "voicewright.componentLabels" (dict "ctx" $ "component" "ai-engine") | nindent 4 }}
 spec:
   minAvailable: {{ .Values.aiEngine.podDisruptionBudget.minAvailable }}
   selector:
     matchLabels:
-      {{- include "cloudpso.selectorLabels" . | nindent 6 }}
+      {{- include "voicewright.selectorLabels" . | nindent 6 }}
       app.kubernetes.io/component: ai-engine
 {{- end }}
 {{- if and .Values.frontend.enabled .Values.frontend.podDisruptionBudget.enabled }}
@@ -32,13 +32,13 @@ spec:
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
-  name: {{ include "cloudpso.fullname" . }}-frontend-dashboard
+  name: {{ include "voicewright.fullname" . }}-frontend-dashboard
   labels:
-    {{- include "cloudpso.componentLabels" (dict "ctx" $ "component" "frontend-dashboard") | nindent 4 }}
+    {{- include "voicewright.componentLabels" (dict "ctx" $ "component" "frontend-dashboard") | nindent 4 }}
 spec:
   minAvailable: {{ .Values.frontend.podDisruptionBudget.minAvailable }}
   selector:
     matchLabels:
-      {{- include "cloudpso.selectorLabels" . | nindent 6 }}
+      {{- include "voicewright.selectorLabels" . | nindent 6 }}
       app.kubernetes.io/component: frontend-dashboard
 {{- end }}

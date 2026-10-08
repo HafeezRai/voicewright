@@ -1,9 +1,9 @@
 {
-  "name": "cloudpso-frontend-dashboard",
+  "name": "voicewright-frontend-dashboard",
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "CloudPSO Voice Agent — React demo + observability dashboard (Phase 4).",
+  "description": "Voicewright Voice Agent — React demo + observability dashboard (Phase 4).",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",

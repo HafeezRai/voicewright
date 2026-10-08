@@ -471,11 +471,11 @@ export function TalkToAgent({ agent }: { agent: Agent }) {
 
   return (
     <section
-      className="flex h-full min-h-[560px] flex-col overflow-hidden rounded-2xl border border-cloudpso-line bg-cloudpso-panel"
+      className="flex h-full min-h-[560px] flex-col overflow-hidden rounded-2xl border border-voicewright-line bg-voicewright-panel"
       data-testid="talk-to-agent"
     >
       {/* ---- status bar ---- */}
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-cloudpso-line px-4 py-3">
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-voicewright-line px-4 py-3">
         <div className="flex items-center gap-2">
           {/* Which agent, on which model. Changing the model in the sidebar is
               otherwise indistinguishable from changing it for a different
@@ -487,7 +487,7 @@ export function TalkToAgent({ agent }: { agent: Agent }) {
           >
             {agent.name}
           </span>
-          <span className="font-mono text-[10px] text-cloudpso-muted" data-testid="active-model">
+          <span className="font-mono text-[10px] text-voicewright-muted" data-testid="active-model">
             {agent.model ? `${agent.provider || "ollama"}/${agent.model}` : "service default"}
           </span>
           <StatusPill
@@ -525,7 +525,7 @@ export function TalkToAgent({ agent }: { agent: Agent }) {
               ].map(([name, granted], index) => (
                 <span key={String(name)}>
                   {index > 0 ? " " : null}
-                  <span className={granted ? "text-cloudpso-ok" : "text-cloudpso-err"}>
+                  <span className={granted ? "text-voicewright-ok" : "text-voicewright-err"}>
                     {granted ? "✓" : "✗"}
                     {name}
                   </span>
@@ -553,8 +553,8 @@ export function TalkToAgent({ agent }: { agent: Agent }) {
               onClick={() => setMode(option.id)}
               className={`rounded-full px-2.5 py-1 text-[11px] transition disabled:opacity-40 ${
                 mode === option.id
-                  ? "bg-cloudpso-accent/15 text-cloudpso-accent"
-                  : "text-cloudpso-muted hover:text-slate-100"
+                  ? "bg-voicewright-accent/15 text-voicewright-accent"
+                  : "text-voicewright-muted hover:text-slate-100"
               }`}
             >
               {option.label}
@@ -582,8 +582,8 @@ export function TalkToAgent({ agent }: { agent: Agent }) {
       </div>
 
       {/* ---- talk control ---- */}
-      <footer className="border-t border-cloudpso-line px-4 py-3">
-        {notice ? <p className="mb-2 text-[11px] text-cloudpso-warn">{notice}</p> : null}
+      <footer className="border-t border-voicewright-line px-4 py-3">
+        {notice ? <p className="mb-2 text-[11px] text-voicewright-warn">{notice}</p> : null}
 
         <div className="flex items-center gap-3">
           {mode === "call" ? (
@@ -593,13 +593,13 @@ export function TalkToAgent({ agent }: { agent: Agent }) {
               onClick={inCall ? teardown : () => void startCall()}
               className={`flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-medium transition ${
                 inCall
-                  ? "bg-cloudpso-err/20 text-cloudpso-err ring-1 ring-cloudpso-err/50"
-                  : "bg-cloudpso-accent text-white hover:bg-cloudpso-accent/90"
+                  ? "bg-voicewright-err/20 text-voicewright-err ring-1 ring-voicewright-err/50"
+                  : "bg-voicewright-accent text-white hover:bg-voicewright-accent/90"
               }`}
             >
               <span
                 className={`h-2.5 w-2.5 rounded-full ${
-                  inCall ? "bg-cloudpso-err" : "bg-white"
+                  inCall ? "bg-voicewright-err" : "bg-white"
                 } ${callState === "listening" ? "animate-pulse-ring" : ""}`}
               />
               {inCall ? "Stop listening" : "Start listening"}
@@ -612,8 +612,8 @@ export function TalkToAgent({ agent }: { agent: Agent }) {
               onClick={recording ? stopRecording : () => void startRecording()}
               className={`flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-medium transition disabled:opacity-50 ${
                 recording
-                  ? "bg-cloudpso-err/20 text-cloudpso-err ring-1 ring-cloudpso-err/50"
-                  : "bg-cloudpso-accent text-white hover:bg-cloudpso-accent/90"
+                  ? "bg-voicewright-err/20 text-voicewright-err ring-1 ring-voicewright-err/50"
+                  : "bg-voicewright-accent text-white hover:bg-voicewright-accent/90"
               }`}
             >
               <span className="h-2.5 w-2.5 rounded-full bg-white" />
@@ -624,18 +624,18 @@ export function TalkToAgent({ agent }: { agent: Agent }) {
           {/* Live level, so a muted mic cannot be mistaken for a dead agent. */}
           {inCall ? (
             <div className="flex flex-1 items-center gap-2" data-testid="mic-meter">
-              <span className="w-7 text-[10px] text-cloudpso-muted">mic</span>
-              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-cloudpso-panel2">
+              <span className="w-7 text-[10px] text-voicewright-muted">mic</span>
+              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-voicewright-panel2">
                 <div
                   className={`h-full rounded-full transition-[width] duration-75 ${
-                    level.phase === "speech" ? "bg-cloudpso-ok" : "bg-cloudpso-muted/50"
+                    level.phase === "speech" ? "bg-voicewright-ok" : "bg-voicewright-muted/50"
                   }`}
                   style={{ width: `${Math.min(100, Math.round(level.rms * 250))}%` }}
                 />
               </div>
             </div>
           ) : (
-            <p className="flex-1 text-[11px] text-cloudpso-muted">
+            <p className="flex-1 text-[11px] text-voicewright-muted">
               {mode === "call"
                 ? "The agent answers when you stop speaking. Talk over it to interrupt."
                 : "Record a clip and wait for the full reply."}
@@ -649,14 +649,14 @@ export function TalkToAgent({ agent }: { agent: Agent }) {
               audioRef.current?.pause();
               abortRef.current?.abort();
             }}
-            className="text-[11px] text-cloudpso-muted transition hover:text-slate-100"
+            className="text-[11px] text-voicewright-muted transition hover:text-slate-100"
           >
             Stop speaking
           </button>
         </div>
 
         {stats ? (
-          <p className="mt-2 font-mono text-[10px] text-cloudpso-muted" data-testid="call-stats">
+          <p className="mt-2 font-mono text-[10px] text-voicewright-muted" data-testid="call-stats">
             {stats}
           </p>
         ) : null}

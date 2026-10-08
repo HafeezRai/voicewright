@@ -145,7 +145,7 @@ export function AgentTurnPanel({ onAgentSpeaking }: { onAgentSpeaking?: (speakin
   }, []);
 
   return (
-    <section className="rounded-2xl border border-cloudpso-line bg-cloudpso-panel p-5">
+    <section className="rounded-2xl border border-voicewright-line bg-voicewright-panel p-5">
       <header className="flex items-center justify-between">
         <h2 className="text-lg font-semibold text-slate-100">Agent turn — STT / LLM / TTS</h2>
         <StatusPill label="ai-engine /stt /llm /tts" tone="info" />
@@ -157,7 +157,7 @@ export function AgentTurnPanel({ onAgentSpeaking }: { onAgentSpeaking?: (speakin
           value={text}
           onChange={(event) => setText(event.target.value)}
           placeholder="Type an utterance…"
-          className="flex-1 rounded-lg border border-cloudpso-line bg-cloudpso-panel2 px-3 py-2 text-sm text-slate-100 outline-none focus:border-cloudpso-accent"
+          className="flex-1 rounded-lg border border-voicewright-line bg-voicewright-panel2 px-3 py-2 text-sm text-slate-100 outline-none focus:border-voicewright-accent"
         />
         <div className="flex gap-2">
           <button
@@ -165,7 +165,7 @@ export function AgentTurnPanel({ onAgentSpeaking }: { onAgentSpeaking?: (speakin
             data-testid="ask"
             onClick={() => void onAsk()}
             disabled={busy}
-            className="rounded-lg bg-cloudpso-accent px-4 py-2 text-sm font-medium text-white transition hover:brightness-110 disabled:opacity-40"
+            className="rounded-lg bg-voicewright-accent px-4 py-2 text-sm font-medium text-white transition hover:brightness-110 disabled:opacity-40"
           >
             Ask the agent
           </button>
@@ -174,7 +174,7 @@ export function AgentTurnPanel({ onAgentSpeaking }: { onAgentSpeaking?: (speakin
             data-testid="speak"
             onClick={() => void onSpeak()}
             disabled={busy}
-            className="rounded-lg border border-cloudpso-line bg-cloudpso-panel2 px-4 py-2 text-sm font-medium text-slate-200 transition hover:border-cloudpso-accent/60 disabled:opacity-40"
+            className="rounded-lg border border-voicewright-line bg-voicewright-panel2 px-4 py-2 text-sm font-medium text-slate-200 transition hover:border-voicewright-accent/60 disabled:opacity-40"
           >
             Speak reply
           </button>
@@ -184,8 +184,8 @@ export function AgentTurnPanel({ onAgentSpeaking }: { onAgentSpeaking?: (speakin
             onClick={() => void (recording ? stopRecording() : startRecording())}
             className={`rounded-lg border px-4 py-2 text-sm font-medium transition ${
               recording
-                ? "border-cloudpso-err/60 bg-cloudpso-err/10 text-cloudpso-err"
-                : "border-cloudpso-line bg-cloudpso-panel2 text-slate-200 hover:border-cloudpso-accent/60"
+                ? "border-voicewright-err/60 bg-voicewright-err/10 text-voicewright-err"
+                : "border-voicewright-line bg-voicewright-panel2 text-slate-200 hover:border-voicewright-accent/60"
             }`}
           >
             {recording ? "Stop & transcribe" : "Record & transcribe"}
@@ -194,30 +194,30 @@ export function AgentTurnPanel({ onAgentSpeaking }: { onAgentSpeaking?: (speakin
       </div>
 
       {notice ? (
-        <p className="mt-3 rounded-lg border border-cloudpso-warn/50 bg-cloudpso-warn/10 px-3 py-2 text-xs text-cloudpso-warn" data-testid="turn-notice">
+        <p className="mt-3 rounded-lg border border-voicewright-warn/50 bg-voicewright-warn/10 px-3 py-2 text-xs text-voicewright-warn" data-testid="turn-notice">
           {notice}
         </p>
       ) : null}
 
       <ul className="mt-4 space-y-2" data-testid="conversation">
         {turns.length === 0 ? (
-          <li className="text-xs text-cloudpso-muted">
+          <li className="text-xs text-voicewright-muted">
             Ask the agent about a typed utterance, or record a clip to exercise real STT.
           </li>
         ) : (
           turns.map((turn) => (
-            <li key={turn.id} className="rounded-xl border border-cloudpso-line bg-cloudpso-panel2 px-3 py-2">
-              <div className="flex items-center gap-2 text-[11px] uppercase tracking-wide text-cloudpso-muted">
+            <li key={turn.id} className="rounded-xl border border-voicewright-line bg-voicewright-panel2 px-3 py-2">
+              <div className="flex items-center gap-2 text-[11px] uppercase tracking-wide text-voicewright-muted">
                 <span>{turn.source === "stt" ? "STT heard" : "Input"}</span>
-                {turn.pending ? <span className="text-cloudpso-warn">processing…</span> : null}
+                {turn.pending ? <span className="text-voicewright-warn">processing…</span> : null}
               </div>
               <p className="mt-1 text-sm text-slate-100">{turn.text}</p>
               {turn.reply ? (
-                <p className="mt-2 rounded-md bg-cloudpso-accent/15 px-2 py-1 text-sm text-cloudpso-accent" data-testid="turn-reply">
+                <p className="mt-2 rounded-md bg-voicewright-accent/15 px-2 py-1 text-sm text-voicewright-accent" data-testid="turn-reply">
                   {turn.reply}
                 </p>
               ) : null}
-              {turn.error ? <p className="mt-2 text-xs text-cloudpso-err">{turn.error}</p> : null}
+              {turn.error ? <p className="mt-2 text-xs text-voicewright-err">{turn.error}</p> : null}
             </li>
           ))
         )}

@@ -7,7 +7,7 @@
 # no usable Secret (see the file header). Supply the real Secret out-of-band.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-namespace: cloudpso
+namespace: voicewright
 resources:
   - namespace.yaml
   - configmap.yaml
@@ -19,4 +19,4 @@ resources:
   - pdb.yaml
   - ingress.yaml
 commonLabels:
-  app.kubernetes.io/part-of: cloudpso-voice-agent
+  app.kubernetes.io/part-of: voicewright-voice-agent

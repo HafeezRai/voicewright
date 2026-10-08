@@ -7,19 +7,19 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: cloudpso-config
-  namespace: cloudpso
+  name: voicewright-config
+  namespace: voicewright
   labels:
-    app.kubernetes.io/part-of: cloudpso-voice-agent
+    app.kubernetes.io/part-of: voicewright-voice-agent
 data:
   # --- cross-service --------------------------------------------------------
-  CLOUDEPSO_ENV: "production"
-  CLOUDEPSO_LOG_LEVEL: "INFO"
-  CLOUDEPSO_CONFIG_PREFIX: "cloudpso"
+  VOICEWRIGHT_ENV: "production"
+  VOICEWRIGHT_LOG_LEVEL: "INFO"
+  VOICEWRIGHT_CONFIG_PREFIX: "voicewright"
 
   # Browser origins allowed to call the HTTP APIs. WebSockets bypass CORS, so
   # this only gates the REST endpoints the dashboard's metrics panels use.
-  CLOUDEPSO_CORS_ALLOW_ORIGINS: "https://voice.cloudpso.example"
+  VOICEWRIGHT_CORS_ALLOW_ORIGINS: "https://voice.voicewright.example"
 
   # --- backend-core ---------------------------------------------------------
   BACKEND_CORE_HOST: "0.0.0.0"

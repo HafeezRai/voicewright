@@ -5,7 +5,7 @@ import warnings
 
 from app.gen import voice_gateway_pb2 as voice__gateway__pb2
 
-GRPC_GENERATED_VERSION = '1.84.0'
+GRPC_GENERATED_VERSION = '1.81.1'
 GRPC_VERSION = grpc.__version__
 _version_not_supported = False
 
@@ -36,12 +36,12 @@ class VoiceGatewayStub:
             channel: A grpc.Channel.
         """
         self.StreamAudio = channel.stream_stream(
-                '/cloudpso.voice.v1.VoiceGateway/StreamAudio',
+                '/voicewright.voice.v1.VoiceGateway/StreamAudio',
                 request_serializer=voice__gateway__pb2.AudioFrame.SerializeToString,
                 response_deserializer=voice__gateway__pb2.VoiceEvent.FromString,
                 _registered_method=True)
         self.Health = channel.unary_unary(
-                '/cloudpso.voice.v1.VoiceGateway/Health',
+                '/voicewright.voice.v1.VoiceGateway/Health',
                 request_serializer=voice__gateway__pb2.HealthRequest.SerializeToString,
                 response_deserializer=voice__gateway__pb2.HealthResponse.FromString,
                 _registered_method=True)
@@ -80,9 +80,9 @@ def add_VoiceGatewayServicer_to_server(servicer, server):
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
-            'cloudpso.voice.v1.VoiceGateway', rpc_method_handlers)
+            'voicewright.voice.v1.VoiceGateway', rpc_method_handlers)
     server.add_generic_rpc_handlers((generic_handler,))
-    server.add_registered_method_handlers('cloudpso.voice.v1.VoiceGateway', rpc_method_handlers)
+    server.add_registered_method_handlers('voicewright.voice.v1.VoiceGateway', rpc_method_handlers)
 
 
  # This class is part of an EXPERIMENTAL API.
@@ -104,7 +104,7 @@ class VoiceGateway:
         return grpc.experimental.stream_stream(
             request_iterator,
             target,
-            '/cloudpso.voice.v1.VoiceGateway/StreamAudio',
+            '/voicewright.voice.v1.VoiceGateway/StreamAudio',
             voice__gateway__pb2.AudioFrame.SerializeToString,
             voice__gateway__pb2.VoiceEvent.FromString,
             options,
@@ -131,7 +131,7 @@ class VoiceGateway:
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/cloudpso.voice.v1.VoiceGateway/Health',
+            '/voicewright.voice.v1.VoiceGateway/Health',
             voice__gateway__pb2.HealthRequest.SerializeToString,
             voice__gateway__pb2.HealthResponse.FromString,
             options,

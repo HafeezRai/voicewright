@@ -1,19 +1,19 @@
 export type Tone = "ok" | "warn" | "err" | "idle" | "info";
 
 const TONE_CLASSES: Record<Tone, string> = {
-  ok: "bg-cloudpso-ok/15 text-cloudpso-ok border-cloudpso-ok/40",
-  warn: "bg-cloudpso-warn/15 text-cloudpso-warn border-cloudpso-warn/40",
-  err: "bg-cloudpso-err/15 text-cloudpso-err border-cloudpso-err/40",
-  idle: "bg-slate-500/10 text-cloudpso-muted border-cloudpso-line",
-  info: "bg-cloudpso-accent/15 text-cloudpso-accent border-cloudpso-accent/40",
+  ok: "bg-voicewright-ok/15 text-voicewright-ok border-voicewright-ok/40",
+  warn: "bg-voicewright-warn/15 text-voicewright-warn border-voicewright-warn/40",
+  err: "bg-voicewright-err/15 text-voicewright-err border-voicewright-err/40",
+  idle: "bg-slate-500/10 text-voicewright-muted border-voicewright-line",
+  info: "bg-voicewright-accent/15 text-voicewright-accent border-voicewright-accent/40",
 };
 
 const DOT_CLASSES: Record<Tone, string> = {
-  ok: "bg-cloudpso-ok",
-  warn: "bg-cloudpso-warn",
-  err: "bg-cloudpso-err",
-  idle: "bg-cloudpso-muted",
-  info: "bg-cloudpso-accent",
+  ok: "bg-voicewright-ok",
+  warn: "bg-voicewright-warn",
+  err: "bg-voicewright-err",
+  idle: "bg-voicewright-muted",
+  info: "bg-voicewright-accent",
 };
 
 export function StatusPill({

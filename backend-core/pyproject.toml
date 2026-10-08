@@ -3,9 +3,9 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "cloudpso-backend-core"
+name = "voicewright-backend-core"
 version = "0.1.0"
-description = "CloudPSO Voice Agent — backend-core: WebRTC gateway, WebSocket management, barge-in (Phase 2)."
+description = "Voicewright Voice Agent — backend-core: WebRTC gateway, WebSocket management, barge-in (Phase 2)."
 requires-python = ">=3.11,<3.12"
 dependencies = [
     "fastapi>=0.110,<1.0",

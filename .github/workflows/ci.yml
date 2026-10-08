@@ -148,15 +148,15 @@ jobs:
 
       - name: helm lint (default, staging, production)
         run: |
-          helm lint infra/helm/cloudpso
-          helm lint infra/helm/cloudpso -f infra/helm/cloudpso/values-staging.yaml
-          helm lint infra/helm/cloudpso -f infra/helm/cloudpso/values-production.yaml
-          helm lint infra/helm/cloudpso --set triton.enabled=true,serviceMonitor.enabled=true
+          helm lint infra/helm/voicewright
+          helm lint infra/helm/voicewright -f infra/helm/voicewright/values-staging.yaml
+          helm lint infra/helm/voicewright -f infra/helm/voicewright/values-production.yaml
+          helm lint infra/helm/voicewright --set triton.enabled=true,serviceMonitor.enabled=true
 
       - name: helm template + validate rendered output
         run: |
-          helm template cloudpso infra/helm/cloudpso > /tmp/helm-default.yaml
-          helm template cloudpso infra/helm/cloudpso -f infra/helm/cloudpso/values-production.yaml > /tmp/helm-prod.yaml
+          helm template voicewright infra/helm/voicewright > /tmp/helm-default.yaml
+          helm template voicewright infra/helm/voicewright -f infra/helm/voicewright/values-production.yaml > /tmp/helm-prod.yaml
           kubeconform -strict -summary -ignore-missing-schemas /tmp/helm-default.yaml /tmp/helm-prod.yaml
 
       - name: Validate prometheus config and rules (promtool)
@@ -164,7 +164,7 @@ jobs:
           docker run --rm -v "$PWD/infra/prometheus:/p:ro" --entrypoint promtool \
             prom/prometheus:v2.51.2 check config /p/prometheus.yml
           docker run --rm -v "$PWD/infra/prometheus/rules:/p:ro" --entrypoint promtool \
-            prom/prometheus:v2.51.2 check rules /p/cloudpso.rules.yml
+            prom/prometheus:v2.51.2 check rules /p/voicewright.rules.yml
 
       - name: Validate compose files
         run: |
@@ -206,6 +206,6 @@ jobs:
           context: ${{ matrix.context }}
           push: false
           load: true
-          tags: cloudpso/${{ matrix.component }}:ci-${{ github.sha }}
+          tags: voicewright/${{ matrix.component }}:ci-${{ github.sha }}
           cache-from: type=gha,scope=${{ matrix.component }}
           cache-to: type=gha,mode=max,scope=${{ matrix.component }}

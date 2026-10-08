@@ -24,7 +24,7 @@ _VALIDATOR_PATH = Path(__file__).resolve().parents[1] / "triton_repo" / "validat
 
 
 def _load_validator():
-    spec = importlib.util.spec_from_file_location("cloudpso_validate_configs", _VALIDATOR_PATH)
+    spec = importlib.util.spec_from_file_location("voicewright_validate_configs", _VALIDATOR_PATH)
     module = importlib.util.module_from_spec(spec)
     # Register before executing: @dataclass resolves annotations via
     # sys.modules[cls.__module__], which is None for an unregistered module.

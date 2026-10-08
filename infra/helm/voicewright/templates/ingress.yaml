@@ -2,9 +2,9 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ include "cloudpso.fullname" . }}
+  name: {{ include "voicewright.fullname" . }}
   labels:
-    {{- include "cloudpso.labels" . | nindent 4 }}
+    {{- include "voicewright.labels" . | nindent 4 }}
   {{- with .Values.ingress.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
@@ -28,7 +28,7 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: {{ include "cloudpso.fullname" . }}-frontend-dashboard
+                name: {{ include "voicewright.fullname" . }}-frontend-dashboard
                 port:
                   number: {{ .Values.frontend.service.port }}
           {{- end }}
@@ -37,7 +37,7 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: {{ include "cloudpso.fullname" . }}-backend-core
+                name: {{ include "voicewright.fullname" . }}-backend-core
                 port:
                   number: {{ .Values.backendCore.service.port }}
           {{- end }}
@@ -46,7 +46,7 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: {{ include "cloudpso.fullname" . }}-ai-engine
+                name: {{ include "voicewright.fullname" . }}-ai-engine
                 port:
                   number: {{ .Values.aiEngine.service.port }}
           {{- end }}

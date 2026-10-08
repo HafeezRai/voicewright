@@ -1,4 +1,4 @@
-# Default values for the cloudpso chart.
+# Default values for the voicewright chart.
 #
 # This file is the contract: every template reads from here, and
 # values-staging.yaml / values-production.yaml override only what differs.
@@ -8,7 +8,7 @@ global:
   environment: production
   imagePullPolicy: IfNotPresent
   # Labels applied to every resource (name/label conventions live in _helpers.tpl).
-  partOf: cloudpso-voice-agent
+  partOf: voicewright-voice-agent
 
 image:
   pullSecrets: []          # e.g. [ { name: regcred } ]
@@ -16,15 +16,15 @@ image:
 # --- non-secret configuration (rendered into a ConfigMap) -------------------
 config:
   logLevel: INFO
-  configPrefix: cloudpso
-  corsAllowOrigins: "https://voice.cloudpso.example"
+  configPrefix: voicewright
+  corsAllowOrigins: "https://voice.voicewright.example"
 
 # --- secrets ---------------------------------------------------------------
 # The chart does NOT create a Secret by default. Point `existingSecret` at a
 # Secret managed by an external secret store, or set `create: true` and supply
 # values (only appropriate for throwaway environments).
 secrets:
-  existingSecret: cloudpso-secrets
+  existingSecret: voicewright-secrets
   create: false
   huggingFaceToken: ""
   turnSharedSecret: ""
@@ -34,7 +34,7 @@ backendCore:
   enabled: true
   replicaCount: 2
   image:
-    repository: cloudpso/backend-core
+    repository: voicewright/backend-core
     tag: "0.2.0"
   service:
     type: ClusterIP
@@ -66,7 +66,7 @@ aiEngine:
   enabled: true
   replicaCount: 2
   image:
-    repository: cloudpso/ai-engine
+    repository: voicewright/ai-engine
     tag: "0.3.0"
   service:
     type: ClusterIP
@@ -107,7 +107,7 @@ frontend:
   enabled: true
   replicaCount: 2
   image:
-    repository: cloudpso/frontend-dashboard
+    repository: voicewright/frontend-dashboard
     tag: "0.1.0"
   service:
     type: ClusterIP
@@ -163,10 +163,10 @@ triton:
 ingress:
   enabled: true
   className: nginx
-  host: voice.cloudpso.example
+  host: voice.voicewright.example
   tls:
     enabled: true
-    secretName: cloudpso-tls
+    secretName: voicewright-tls
   annotations:
     nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"

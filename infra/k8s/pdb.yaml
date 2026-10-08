@@ -5,7 +5,7 @@ apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   name: backend-core
-  namespace: cloudpso
+  namespace: voicewright
 spec:
   minAvailable: 1
   selector:
@@ -16,7 +16,7 @@ apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   name: ai-engine
-  namespace: cloudpso
+  namespace: voicewright
 spec:
   minAvailable: 1
   selector:
@@ -27,7 +27,7 @@ apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   name: frontend-dashboard
-  namespace: cloudpso
+  namespace: voicewright
 spec:
   minAvailable: 1
   selector:

@@ -17,7 +17,7 @@ interface VoiceHook {
 }
 
 const hook = (page: Page): Promise<VoiceHook> =>
-  page.evaluate(() => (window as unknown as { __cloudpsoVoice: VoiceHook }).__cloudpsoVoice);
+  page.evaluate(() => (window as unknown as { __voicewrightVoice: VoiceHook }).__voicewrightVoice);
 
 test("browser mic negotiates WebRTC with backend-core and reaches connected", async ({ page }) => {
   const errors: string[] = [];

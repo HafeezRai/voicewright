@@ -97,11 +97,11 @@ export function KnowledgePanel({ agent }: { agent: Agent }) {
   );
 
   return (
-    <section className="rounded-xl border border-cloudpso-line bg-cloudpso-panel p-4" data-testid="knowledge-panel">
+    <section className="rounded-xl border border-voicewright-line bg-voicewright-panel p-4" data-testid="knowledge-panel">
       <header className="mb-3 flex flex-wrap items-start justify-between gap-2">
         <div>
           <h3 className="text-sm font-semibold">Knowledge base</h3>
-          <p className="text-[11px] text-cloudpso-muted">
+          <p className="text-[11px] text-voicewright-muted">
             Chunked, embedded and retrieved into this agent's prompt at answer time.
           </p>
         </div>
@@ -118,7 +118,7 @@ export function KnowledgePanel({ agent }: { agent: Agent }) {
           onChange={(event) => setTitle(event.target.value)}
           placeholder="Title (optional)"
           aria-label="Document title"
-          className="rounded-lg border border-cloudpso-line bg-cloudpso-panel2 px-3 py-1.5 text-sm outline-none focus:border-cloudpso-accent"
+          className="rounded-lg border border-voicewright-line bg-voicewright-panel2 px-3 py-1.5 text-sm outline-none focus:border-voicewright-accent"
         />
         <textarea
           value={text}
@@ -126,7 +126,7 @@ export function KnowledgePanel({ agent }: { agent: Agent }) {
           rows={4}
           placeholder="Paste policy, FAQs, pricing — anything this agent should know."
           aria-label="Document text"
-          className="resize-y rounded-lg border border-cloudpso-line bg-cloudpso-panel2 px-3 py-2 text-sm outline-none focus:border-cloudpso-accent"
+          className="resize-y rounded-lg border border-voicewright-line bg-voicewright-panel2 px-3 py-2 text-sm outline-none focus:border-voicewright-accent"
         />
         <div className="flex flex-wrap items-center gap-2">
           <button
@@ -134,7 +134,7 @@ export function KnowledgePanel({ agent }: { agent: Agent }) {
             data-testid="add-text-document"
             disabled={busy || text.trim().length === 0}
             onClick={onAddText}
-            className="rounded-lg bg-cloudpso-accent px-3 py-1.5 text-sm font-medium text-white transition hover:bg-cloudpso-accent/90 disabled:opacity-40"
+            className="rounded-lg bg-voicewright-accent px-3 py-1.5 text-sm font-medium text-white transition hover:bg-voicewright-accent/90 disabled:opacity-40"
           >
             Add text
           </button>
@@ -142,7 +142,7 @@ export function KnowledgePanel({ agent }: { agent: Agent }) {
             type="button"
             disabled={busy}
             onClick={() => fileRef.current?.click()}
-            className="rounded-lg border border-cloudpso-line px-3 py-1.5 text-sm text-cloudpso-muted transition hover:text-slate-100 disabled:opacity-40"
+            className="rounded-lg border border-voicewright-line px-3 py-1.5 text-sm text-voicewright-muted transition hover:text-slate-100 disabled:opacity-40"
           >
             Upload .txt / .md
           </button>
@@ -156,17 +156,17 @@ export function KnowledgePanel({ agent }: { agent: Agent }) {
         </div>
       </div>
 
-      {error && <p className="mt-2 text-[11px] text-cloudpso-err">{error}</p>}
+      {error && <p className="mt-2 text-[11px] text-voicewright-err">{error}</p>}
 
       <ul className="mt-3 flex flex-col gap-1.5">
         {documents.map((document) => (
           <li
             key={document.id}
-            className="flex items-center justify-between gap-3 rounded-lg border border-cloudpso-line bg-cloudpso-panel2 px-3 py-2"
+            className="flex items-center justify-between gap-3 rounded-lg border border-voicewright-line bg-voicewright-panel2 px-3 py-2"
           >
             <div className="min-w-0">
               <p className="truncate text-sm">{document.title}</p>
-              <p className="font-mono text-[10px] text-cloudpso-muted">
+              <p className="font-mono text-[10px] text-voicewright-muted">
                 {document.char_count} chars · {document.chunk_count} chunk
                 {document.chunk_count === 1 ? "" : "s"} · {document.source}
               </p>
@@ -176,7 +176,7 @@ export function KnowledgePanel({ agent }: { agent: Agent }) {
               onClick={() => void run(() => deleteDocument(document.id))}
               disabled={busy}
               aria-label={`Delete ${document.title}`}
-              className="shrink-0 text-[11px] text-cloudpso-muted transition hover:text-cloudpso-err disabled:opacity-40"
+              className="shrink-0 text-[11px] text-voicewright-muted transition hover:text-voicewright-err disabled:opacity-40"
             >
               Delete
             </button>

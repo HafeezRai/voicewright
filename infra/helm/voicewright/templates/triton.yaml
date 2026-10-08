@@ -3,9 +3,9 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: {{ include "cloudpso.fullname" . }}-triton-models
+  name: {{ include "voicewright.fullname" . }}-triton-models
   labels:
-    {{- include "cloudpso.componentLabels" (dict "ctx" $ "component" "triton") | nindent 4 }}
+    {{- include "voicewright.componentLabels" (dict "ctx" $ "component" "triton") | nindent 4 }}
 spec:
   accessModes:
     {{- toYaml .Values.triton.persistence.accessModes | nindent 4 }}
@@ -20,26 +20,26 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "cloudpso.fullname" . }}-triton
+  name: {{ include "voicewright.fullname" . }}-triton
   labels:
-    {{- include "cloudpso.componentLabels" (dict "ctx" $ "component" "triton") | nindent 4 }}
+    {{- include "voicewright.componentLabels" (dict "ctx" $ "component" "triton") | nindent 4 }}
 spec:
   replicas: {{ .Values.triton.replicaCount }}
   selector:
     matchLabels:
-      {{- include "cloudpso.selectorLabels" . | nindent 6 }}
+      {{- include "voicewright.selectorLabels" . | nindent 6 }}
       app.kubernetes.io/component: triton
   template:
     metadata:
       labels:
-        {{- include "cloudpso.selectorLabels" . | nindent 8 }}
+        {{- include "voicewright.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: triton
       {{- with .Values.triton.podAnnotations }}
       annotations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
     spec:
-      {{- include "cloudpso.imagePullSecrets" . | nindent 6 }}
+      {{- include "voicewright.imagePullSecrets" . | nindent 6 }}
       {{- with .Values.triton.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
@@ -94,7 +94,7 @@ spec:
         {{- if .Values.triton.persistence.enabled }}
         - name: models
           persistentVolumeClaim:
-            claimName: {{ .Values.triton.persistence.existingClaim | default (printf "%s-triton-models" (include "cloudpso.fullname" .)) }}
+            claimName: {{ .Values.triton.persistence.existingClaim | default (printf "%s-triton-models" (include "voicewright.fullname" .)) }}
         {{- end }}
         - name: shm
           emptyDir:
@@ -104,13 +104,13 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "cloudpso.fullname" . }}-triton
+  name: {{ include "voicewright.fullname" . }}-triton
   labels:
-    {{- include "cloudpso.componentLabels" (dict "ctx" $ "component" "triton") | nindent 4 }}
+    {{- include "voicewright.componentLabels" (dict "ctx" $ "component" "triton") | nindent 4 }}
 spec:
   type: {{ .Values.triton.service.type }}
   selector:
-    {{- include "cloudpso.selectorLabels" . | nindent 4 }}
+    {{- include "voicewright.selectorLabels" . | nindent 4 }}
     app.kubernetes.io/component: triton
   ports:
     - name: http

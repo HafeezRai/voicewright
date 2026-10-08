@@ -2,14 +2,14 @@
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: {{ include "cloudpso.fullname" . }}-backend-core
+  name: {{ include "voicewright.fullname" . }}-backend-core
   labels:
-    {{- include "cloudpso.componentLabels" (dict "ctx" $ "component" "backend-core") | nindent 4 }}
+    {{- include "voicewright.componentLabels" (dict "ctx" $ "component" "backend-core") | nindent 4 }}
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: {{ include "cloudpso.fullname" . }}-backend-core
+    name: {{ include "voicewright.fullname" . }}-backend-core
   minReplicas: {{ .Values.backendCore.autoscaling.minReplicas }}
   maxReplicas: {{ .Values.backendCore.autoscaling.maxReplicas }}
   metrics:
@@ -30,14 +30,14 @@ spec:
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: {{ include "cloudpso.fullname" . }}-ai-engine
+  name: {{ include "voicewright.fullname" . }}-ai-engine
   labels:
-    {{- include "cloudpso.componentLabels" (dict "ctx" $ "component" "ai-engine") | nindent 4 }}
+    {{- include "voicewright.componentLabels" (dict "ctx" $ "component" "ai-engine") | nindent 4 }}
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: {{ include "cloudpso.fullname" . }}-ai-engine
+    name: {{ include "voicewright.fullname" . }}-ai-engine
   minReplicas: {{ .Values.aiEngine.autoscaling.minReplicas }}
   maxReplicas: {{ .Values.aiEngine.autoscaling.maxReplicas }}
   metrics:

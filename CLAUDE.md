@@ -1,4 +1,4 @@
-# CloudPSO Voice Agent - Master Context
+# Voicewright Voice Agent - Master Context
 
 ## Project Overview
 Enterprise real-time AI voice assistant. STT + NLU + TTS over WebRTC/WebSocket.
@@ -11,7 +11,7 @@ Enterprise real-time AI voice assistant. STT + NLU + TTS over WebRTC/WebSocket.
 - Infra: Docker, Kubernetes, Helm, Prometheus
 
 ## Directory Structure
-/cloudpso-voice-agent
+/voicewright-voice-agent
   /backend-core         # WebRTC gateway, WebSocket mgmt, barge-in logic
   /ai-engine            # STT, NLU, TTS microservices
   /mlops-pipeline       # ONNX export, Triton configs

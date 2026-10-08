@@ -36,17 +36,17 @@ export function DashboardPanel({ metrics }: { metrics: UseMetrics }) {
 
   return (
     <section className="flex flex-col gap-4" data-testid="dashboard">
-      <div className="rounded-2xl border border-cloudpso-line bg-cloudpso-panel p-5">
+      <div className="rounded-2xl border border-voicewright-line bg-voicewright-panel p-5">
         <header className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-lg font-semibold text-slate-100">Observability</h2>
           <div className="flex items-center gap-2">
-            <span className="text-xs text-cloudpso-muted">
+            <span className="text-xs text-voicewright-muted">
               {lastPoll ? `updated ${new Date(lastPoll).toLocaleTimeString()}` : "polling…"}
             </span>
             <button
               type="button"
               onClick={refresh}
-              className="rounded-md border border-cloudpso-line bg-cloudpso-panel2 px-2.5 py-1 text-xs text-slate-200 transition hover:border-cloudpso-accent/60"
+              className="rounded-md border border-voicewright-line bg-voicewright-panel2 px-2.5 py-1 text-xs text-slate-200 transition hover:border-voicewright-accent/60"
             >
               Refresh
             </button>
@@ -54,11 +54,11 @@ export function DashboardPanel({ metrics }: { metrics: UseMetrics }) {
         </header>
 
         <div className="mt-3 grid gap-2 sm:grid-cols-2">
-          <div className="flex items-center justify-between rounded-lg border border-cloudpso-line bg-cloudpso-panel2 px-3 py-2 text-sm">
+          <div className="flex items-center justify-between rounded-lg border border-voicewright-line bg-voicewright-panel2 px-3 py-2 text-sm">
             <span className="text-slate-200">backend-core</span>
             {online(snapshot.backend.online, snapshot.backend.error)}
           </div>
-          <div className="flex items-center justify-between rounded-lg border border-cloudpso-line bg-cloudpso-panel2 px-3 py-2 text-sm">
+          <div className="flex items-center justify-between rounded-lg border border-voicewright-line bg-voicewright-panel2 px-3 py-2 text-sm">
             <span className="text-slate-200">ai-engine</span>
             {online(snapshot.aiEngine.online, snapshot.aiEngine.error)}
           </div>
@@ -95,7 +95,7 @@ export function DashboardPanel({ metrics }: { metrics: UseMetrics }) {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-cloudpso-line bg-cloudpso-panel p-5">
+      <div className="rounded-2xl border border-voicewright-line bg-voicewright-panel p-5">
         <h3 className="text-sm font-semibold text-slate-200">Pipeline latency (p50 / p95, ms)</h3>
         <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
           <MetricTile label="STT p50" value={ms(snapshot.sttP50)} unit="ms" sub={`p95 ${ms(snapshot.sttP95)}`} testId="tile-stt" />
@@ -103,7 +103,7 @@ export function DashboardPanel({ metrics }: { metrics: UseMetrics }) {
           <MetricTile label="TTS p50" value={ms(snapshot.ttsP50)} unit="ms" sub={`p95 ${ms(snapshot.ttsP95)}`} testId="tile-tts" />
           <MetricTile label="Pipeline p50" value={ms(snapshot.pipelineP50)} unit="ms" sub={`p95 ${ms(snapshot.pipelineP95)}`} testId="tile-pipeline" />
         </div>
-        <div className="mt-3 grid grid-cols-2 gap-3 text-xs text-cloudpso-muted lg:grid-cols-4">
+        <div className="mt-3 grid grid-cols-2 gap-3 text-xs text-voicewright-muted lg:grid-cols-4">
           <span>STT reqs: {formatMetric(snapshot.sttRequests)}</span>
           <span>LLM reqs: {formatMetric(snapshot.llmRequests)}</span>
           <span>TTS reqs: {formatMetric(snapshot.ttsRequests)}</span>
@@ -112,7 +112,7 @@ export function DashboardPanel({ metrics }: { metrics: UseMetrics }) {
       </div>
 
       <div className="grid gap-4 xl:grid-cols-2">
-        <div className="rounded-2xl border border-cloudpso-line bg-cloudpso-panel p-5">
+        <div className="rounded-2xl border border-voicewright-line bg-voicewright-panel p-5">
           <h3 className="text-sm font-semibold text-slate-200">Sessions &amp; connections</h3>
           <div className="mt-3">
             <TimeSeriesChart
@@ -125,7 +125,7 @@ export function DashboardPanel({ metrics }: { metrics: UseMetrics }) {
             />
           </div>
         </div>
-        <div className="rounded-2xl border border-cloudpso-line bg-cloudpso-panel p-5">
+        <div className="rounded-2xl border border-voicewright-line bg-voicewright-panel p-5">
           <h3 className="text-sm font-semibold text-slate-200">Barge-in events (cumulative)</h3>
           <div className="mt-3">
             <TimeSeriesChart
@@ -135,7 +135,7 @@ export function DashboardPanel({ metrics }: { metrics: UseMetrics }) {
             />
           </div>
         </div>
-        <div className="rounded-2xl border border-cloudpso-line bg-cloudpso-panel p-5 xl:col-span-2">
+        <div className="rounded-2xl border border-voicewright-line bg-voicewright-panel p-5 xl:col-span-2">
           <h3 className="text-sm font-semibold text-slate-200">Latency p95 (ms)</h3>
           <div className="mt-3">
             <TimeSeriesChart

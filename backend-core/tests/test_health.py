@@ -33,9 +33,9 @@ def test_health_reports_configured_service_name() -> None:
 
 def test_settings_load_defaults_with_empty_env(monkeypatch: pytest.MonkeyPatch) -> None:
     for var in (
-        "CLOUDEPSO_ENV",
-        "CLOUDEPSO_LOG_LEVEL",
-        "CLOUDEPSO_CONFIG_PREFIX",
+        "VOICEWRIGHT_ENV",
+        "VOICEWRIGHT_LOG_LEVEL",
+        "VOICEWRIGHT_CONFIG_PREFIX",
         "BACKEND_CORE_HOST",
         "BACKEND_CORE_PORT",
         "BACKEND_CORE_GRPC_PORT",
@@ -48,7 +48,7 @@ def test_settings_load_defaults_with_empty_env(monkeypatch: pytest.MonkeyPatch) 
     assert settings.service_name == "backend-core"
     assert settings.env == "development"
     assert settings.log_level == "INFO"
-    assert settings.config_prefix == "cloudpso"
+    assert settings.config_prefix == "voicewright"
     assert settings.host == "0.0.0.0"
     assert settings.port == 8000
     assert settings.grpc_port == 50051
@@ -57,10 +57,10 @@ def test_settings_load_defaults_with_empty_env(monkeypatch: pytest.MonkeyPatch) 
 
 
 def test_settings_read_and_normalise_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("CLOUDEPSO_ENV", "production")
-    monkeypatch.setenv("CLOUDEPSO_LOG_LEVEL", "debug")  # lower-case on purpose
+    monkeypatch.setenv("VOICEWRIGHT_ENV", "production")
+    monkeypatch.setenv("VOICEWRIGHT_LOG_LEVEL", "debug")  # lower-case on purpose
     monkeypatch.setenv("BACKEND_CORE_PORT", "9000")
-    monkeypatch.setenv("CLOUDEPSO_CONFIG_PREFIX", "pso")
+    monkeypatch.setenv("VOICEWRIGHT_CONFIG_PREFIX", "pso")
 
     settings = Settings()
 
@@ -72,7 +72,7 @@ def test_settings_read_and_normalise_env(monkeypatch: pytest.MonkeyPatch) -> Non
 
 
 def test_settings_rejects_invalid_log_level(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("CLOUDEPSO_LOG_LEVEL", "CHATTY")
+    monkeypatch.setenv("VOICEWRIGHT_LOG_LEVEL", "CHATTY")
     with pytest.raises(Exception):
         Settings()
 

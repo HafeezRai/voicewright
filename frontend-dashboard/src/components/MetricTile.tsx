@@ -1,11 +1,11 @@
 import type { Tone } from "./StatusPill";
 
 const VALUE_TONE: Record<Tone, string> = {
-  ok: "text-cloudpso-ok",
-  warn: "text-cloudpso-warn",
-  err: "text-cloudpso-err",
+  ok: "text-voicewright-ok",
+  warn: "text-voicewright-warn",
+  err: "text-voicewright-err",
   idle: "text-slate-100",
-  info: "text-cloudpso-accent",
+  info: "text-voicewright-accent",
 };
 
 /** Format a number for a tile, tolerating NaN/undefined from missing series. */
@@ -36,14 +36,14 @@ export function MetricTile({
   return (
     <div
       data-testid={testId}
-      className="rounded-xl border border-cloudpso-line bg-cloudpso-panel2 px-4 py-3"
+      className="rounded-xl border border-voicewright-line bg-voicewright-panel2 px-4 py-3"
     >
-      <div className="text-[11px] uppercase tracking-wide text-cloudpso-muted">{label}</div>
+      <div className="text-[11px] uppercase tracking-wide text-voicewright-muted">{label}</div>
       <div className={`mt-1 text-2xl font-semibold tabular-nums ${VALUE_TONE[tone]}`}>
         {value}
-        {unit ? <span className="ml-1 text-sm font-normal text-cloudpso-muted">{unit}</span> : null}
+        {unit ? <span className="ml-1 text-sm font-normal text-voicewright-muted">{unit}</span> : null}
       </div>
-      {sub ? <div className="mt-0.5 text-xs text-cloudpso-muted">{sub}</div> : null}
+      {sub ? <div className="mt-0.5 text-xs text-voicewright-muted">{sub}</div> : null}
     </div>
   );
 }

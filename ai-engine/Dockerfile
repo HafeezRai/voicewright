@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-# CloudPSO Voice Agent — ai-engine (Phase 3: STT -> LLM -> TTS).
+# Voicewright Voice Agent — ai-engine (Phase 3: STT -> LLM -> TTS).
 FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \

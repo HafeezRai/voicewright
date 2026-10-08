@@ -60,21 +60,21 @@ export interface DashboardSnapshot {
 }
 
 const METRIC = {
-  activeSessions: "cloudpso_active_webrtc_sessions",
-  totalSessions: "cloudpso_webrtc_sessions_total",
-  bargeInEvents: "cloudpso_bargein_events_total",
-  wsConnections: "cloudpso_signaling_connections",
-  vadFrames: "cloudpso_vad_frames_processed_total",
+  activeSessions: "voicewright_active_webrtc_sessions",
+  totalSessions: "voicewright_webrtc_sessions_total",
+  bargeInEvents: "voicewright_bargein_events_total",
+  wsConnections: "voicewright_signaling_connections",
+  vadFrames: "voicewright_vad_frames_processed_total",
 
-  sttRequests: "cloudpso_ai_stt_requests_total",
-  sttLatency: "cloudpso_ai_stt_latency_seconds",
-  llmRequests: "cloudpso_ai_llm_requests_total",
-  llmLatency: "cloudpso_ai_llm_latency_seconds",
-  ttsRequests: "cloudpso_ai_tts_requests_total",
-  ttsLatency: "cloudpso_ai_tts_latency_seconds",
-  ttsCancelled: "cloudpso_ai_tts_cancelled_total",
-  pipelineRequests: "cloudpso_ai_pipeline_requests_total",
-  pipelineLatency: "cloudpso_ai_pipeline_latency_seconds",
+  sttRequests: "voicewright_ai_stt_requests_total",
+  sttLatency: "voicewright_ai_stt_latency_seconds",
+  llmRequests: "voicewright_ai_llm_requests_total",
+  llmLatency: "voicewright_ai_llm_latency_seconds",
+  ttsRequests: "voicewright_ai_tts_requests_total",
+  ttsLatency: "voicewright_ai_tts_latency_seconds",
+  ttsCancelled: "voicewright_ai_tts_cancelled_total",
+  pipelineRequests: "voicewright_ai_pipeline_requests_total",
+  pipelineLatency: "voicewright_ai_pipeline_latency_seconds",
 } as const;
 
 export const METRIC_NAMES = METRIC;

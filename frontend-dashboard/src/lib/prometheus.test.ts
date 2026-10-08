@@ -119,18 +119,18 @@ describe("parsing real backend-core /metrics output", () => {
   const parsed = parse(backendFixture);
 
   it("reads the live session gauges captured mid-session", () => {
-    expect(scalar(parsed, "cloudpso_active_webrtc_sessions")).toBe(1);
-    expect(sum(parsed, "cloudpso_webrtc_sessions_total")).toBe(1);
-    expect(scalar(parsed, "cloudpso_signaling_connections")).toBe(1);
+    expect(scalar(parsed, "voicewright_active_webrtc_sessions")).toBe(1);
+    expect(sum(parsed, "voicewright_webrtc_sessions_total")).toBe(1);
+    expect(scalar(parsed, "voicewright_signaling_connections")).toBe(1);
   });
 
   it("exposes every metric backend-core promises", () => {
     for (const name of [
-      "cloudpso_active_webrtc_sessions",
-      "cloudpso_webrtc_sessions_total",
-      "cloudpso_bargein_events_total",
-      "cloudpso_vad_frames_processed_total",
-      "cloudpso_signaling_connections",
+      "voicewright_active_webrtc_sessions",
+      "voicewright_webrtc_sessions_total",
+      "voicewright_bargein_events_total",
+      "voicewright_vad_frames_processed_total",
+      "voicewright_signaling_connections",
     ]) {
       expect(parsed.families.has(name), `missing ${name}`).toBe(true);
     }
@@ -141,12 +141,12 @@ describe("parsing real ai-engine /metrics output", () => {
   const parsed = parse(aiEngineFixture);
 
   it("counts the real LLM/TTS requests made against the service", () => {
-    expect(sum(parsed, "cloudpso_ai_llm_requests_total", { provider: "ollama", status: "ok" })).toBe(2);
-    expect(sum(parsed, "cloudpso_ai_tts_requests_total", { status: "ok" })).toBe(1);
+    expect(sum(parsed, "voicewright_ai_llm_requests_total", { provider: "ollama", status: "ok" })).toBe(2);
+    expect(sum(parsed, "voicewright_ai_tts_requests_total", { status: "ok" })).toBe(1);
   });
 
   it("produces finite latency percentiles from the real histograms", () => {
-    const h = histogram(parsed, "cloudpso_ai_llm_latency_seconds", { provider: "ollama" });
+    const h = histogram(parsed, "voicewright_ai_llm_latency_seconds", { provider: "ollama" });
     expect(h.count).toBe(2);
     const p50 = histogramQuantile(h, 0.5);
     const p95 = histogramQuantile(h, 0.95);

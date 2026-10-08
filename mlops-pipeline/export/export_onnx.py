@@ -1,4 +1,4 @@
-"""ONNX export for the CloudPSO ai-engine models (Phase 5).
+"""ONNX export for the Voicewright ai-engine models (Phase 5).
 
 This is the bridge between the checkpoints Phase 3 selected and the artifacts a
 Triton inference server can actually load. It is deliberately *explicit* about

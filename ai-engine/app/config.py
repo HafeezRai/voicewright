@@ -99,9 +99,9 @@ class Settings(BaseSettings):
 
     # --- shared / cross-service ---------------------------------------------
     service_name: str = "ai-engine"
-    config_prefix: str = Field(default="cloudpso", alias="CLOUDEPSO_CONFIG_PREFIX")
-    env: Environment = Field(default="development", alias="CLOUDEPSO_ENV")
-    log_level: LogLevel = Field(default="INFO", alias="CLOUDEPSO_LOG_LEVEL")
+    config_prefix: str = Field(default="voicewright", alias="VOICEWRIGHT_CONFIG_PREFIX")
+    env: Environment = Field(default="development", alias="VOICEWRIGHT_ENV")
+    log_level: LogLevel = Field(default="INFO", alias="VOICEWRIGHT_LOG_LEVEL")
 
     # --- HTTP server ---------------------------------------------------------
     host: str = Field(default="0.0.0.0", alias="AI_ENGINE_HOST")
@@ -117,7 +117,7 @@ class Settings(BaseSettings):
     # let any page a user visits drive STT/LLM/TTS on their behalf.
     cors_allow_origins: str = Field(
         default="http://localhost:5173,http://127.0.0.1:5173",
-        alias="CLOUDEPSO_CORS_ALLOW_ORIGINS",
+        alias="VOICEWRIGHT_CORS_ALLOW_ORIGINS",
     )
 
     # --- models --------------------------------------------------------------

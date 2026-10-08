@@ -10,33 +10,33 @@ client = TestClient(app)
 
 EXPECTED = {
     # STT
-    "cloudpso_ai_stt_requests_total",
-    "cloudpso_ai_stt_latency_seconds",
-    "cloudpso_ai_stt_audio_seconds",
+    "voicewright_ai_stt_requests_total",
+    "voicewright_ai_stt_latency_seconds",
+    "voicewright_ai_stt_audio_seconds",
     # LLM
-    "cloudpso_ai_llm_requests_total",
-    "cloudpso_ai_llm_latency_seconds",
-    "cloudpso_ai_llm_first_token_seconds",
-    "cloudpso_ai_llm_tokens_total",
-    "cloudpso_ai_llm_cancelled_total",
+    "voicewright_ai_llm_requests_total",
+    "voicewright_ai_llm_latency_seconds",
+    "voicewright_ai_llm_first_token_seconds",
+    "voicewright_ai_llm_tokens_total",
+    "voicewright_ai_llm_cancelled_total",
     # TTS
-    "cloudpso_ai_tts_requests_total",
-    "cloudpso_ai_tts_latency_seconds",
-    "cloudpso_ai_tts_audio_seconds",
-    "cloudpso_ai_tts_cancelled_total",
+    "voicewright_ai_tts_requests_total",
+    "voicewright_ai_tts_latency_seconds",
+    "voicewright_ai_tts_audio_seconds",
+    "voicewright_ai_tts_cancelled_total",
     # pipeline
-    "cloudpso_ai_pipeline_requests_total",
-    "cloudpso_ai_pipeline_latency_seconds",
+    "voicewright_ai_pipeline_requests_total",
+    "voicewright_ai_pipeline_latency_seconds",
     # gRPC
-    "cloudpso_ai_grpc_audio_frames_total",
-    "cloudpso_ai_grpc_events_total",
+    "voicewright_ai_grpc_audio_frames_total",
+    "voicewright_ai_grpc_events_total",
 }
 
 #: The retired intent stage. A dashboard still querying these shows a flat zero
 #: with no error at all, so their absence is asserted rather than assumed.
 RETIRED = {
-    "cloudpso_ai_nlu_requests_total",
-    "cloudpso_ai_nlu_latency_seconds",
+    "voicewright_ai_nlu_requests_total",
+    "voicewright_ai_nlu_latency_seconds",
 }
 
 
@@ -60,15 +60,15 @@ def test_the_nlu_series_are_gone() -> None:
 
 
 def test_every_ai_engine_metric_is_namespaced() -> None:
-    """Mirror backend-core's convention: this service owns ``cloudpso_ai_*``."""
+    """Mirror backend-core's convention: this service owns ``voicewright_ai_*``."""
     body = client.get("/metrics").text
-    cloudpso_series = {
+    voicewright_series = {
         line.split("{", 1)[0].split(" ", 1)[0]
         for line in body.splitlines()
-        if line.startswith("cloudpso_")
+        if line.startswith("voicewright_")
     }
-    assert cloudpso_series, "no cloudpso_ series exported at all"
-    assert all(name.startswith("cloudpso_ai_") for name in cloudpso_series)
+    assert voicewright_series, "no voicewright_ series exported at all"
+    assert all(name.startswith("voicewright_ai_") for name in voicewright_series)
 
 
 def test_pipeline_requests_are_labelled_by_llm_provider() -> None:
@@ -76,7 +76,7 @@ def test_pipeline_requests_are_labelled_by_llm_provider() -> None:
     break, so the new one is pinned."""
     body = client.get("/metrics").text
     pipeline_lines = [
-        line for line in body.splitlines() if line.startswith("cloudpso_ai_pipeline_requests_total")
+        line for line in body.splitlines() if line.startswith("voicewright_ai_pipeline_requests_total")
     ]
     assert pipeline_lines, "no pipeline request samples exported"
     assert any("llm_provider=" in line for line in pipeline_lines)
@@ -89,7 +89,7 @@ def test_first_token_histogram_has_coarse_buckets() -> None:
     bucket_lines = [
         line
         for line in body.splitlines()
-        if line.startswith("cloudpso_ai_llm_first_token_seconds_bucket")
+        if line.startswith("voicewright_ai_llm_first_token_seconds_bucket")
     ]
     assert bucket_lines, "first-token histogram is not exported"
     assert any('le="60.0"' in line for line in bucket_lines), (
@@ -126,7 +126,7 @@ def _before_after(series: str, call) -> tuple[float, float]:
 
 def test_llm_endpoint_records_metrics() -> None:
     before, after = _before_after(
-        "cloudpso_ai_llm_requests_total",
+        "voicewright_ai_llm_requests_total",
         lambda: client.post("/llm", json={"text": "I want to book an appointment"}),
     )
     assert after > before
@@ -135,7 +135,7 @@ def test_llm_endpoint_records_metrics() -> None:
 def test_llm_endpoint_records_token_usage() -> None:
     """The fake reports usage, so the counter must move."""
     before, after = _before_after(
-        "cloudpso_ai_llm_tokens_total",
+        "voicewright_ai_llm_tokens_total",
         lambda: client.post("/llm", json={"text": "hello there"}),
     )
     assert after > before
@@ -143,7 +143,7 @@ def test_llm_endpoint_records_token_usage() -> None:
 
 def test_tts_endpoint_records_metrics() -> None:
     before, after = _before_after(
-        "cloudpso_ai_tts_requests_total",
+        "voicewright_ai_tts_requests_total",
         lambda: client.post("/tts", json={"text": "hello there"}),
     )
     assert after > before
@@ -152,7 +152,7 @@ def test_tts_endpoint_records_metrics() -> None:
 def test_stt_endpoint_records_metrics(speech_wav) -> None:
     body = speech_wav.read_bytes()
     before, after = _before_after(
-        "cloudpso_ai_stt_requests_total",
+        "voicewright_ai_stt_requests_total",
         lambda: client.post("/stt", content=body),
     )
     assert after > before
@@ -161,7 +161,7 @@ def test_stt_endpoint_records_metrics(speech_wav) -> None:
 def test_pipeline_endpoint_records_metrics(speech_wav) -> None:
     body = speech_wav.read_bytes()
     before, after = _before_after(
-        "cloudpso_ai_pipeline_requests_total",
+        "voicewright_ai_pipeline_requests_total",
         lambda: client.post("/pipeline", content=body),
     )
     assert after > before

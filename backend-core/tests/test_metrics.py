@@ -28,18 +28,18 @@ def test_metrics_exposes_expected_names() -> None:
 
     body = client.get("/metrics").text
     for name in (
-        "cloudpso_active_webrtc_sessions",
-        "cloudpso_webrtc_sessions_total",
-        "cloudpso_bargein_events_total",
-        "cloudpso_vad_frames_processed_total",
-        "cloudpso_signaling_connections",
+        "voicewright_active_webrtc_sessions",
+        "voicewright_webrtc_sessions_total",
+        "voicewright_bargein_events_total",
+        "voicewright_vad_frames_processed_total",
+        "voicewright_signaling_connections",
     ):
         assert name in body, f"missing metric {name} in /metrics output"
 
 
 def test_metrics_active_session_gauge_starts_at_zero() -> None:
     body = client.get("/metrics").text
-    assert "cloudpso_active_webrtc_sessions 0.0" in body
+    assert "voicewright_active_webrtc_sessions 0.0" in body
 
 
 class _AlwaysSpeechVAD(VAD):
@@ -53,7 +53,7 @@ class _AlwaysSpeechVAD(VAD):
 
 
 def test_bargein_counter_increments_once_per_real_interrupt() -> None:
-    """A real BARGE_IN bumps cloudpso_bargein_events_total exactly once.
+    """A real BARGE_IN bumps voicewright_bargein_events_total exactly once.
 
     Drives the session audio pipeline (the same path the gateway's
     ``on_audio_frame`` callback uses) while the sink is "speaking": the counter
@@ -69,18 +69,18 @@ def test_bargein_counter_increments_once_per_real_interrupt() -> None:
             min_speech_ms=200,
         )
         try:
-            before = REGISTRY.get_sample_value("cloudpso_bargein_events_total")
+            before = REGISTRY.get_sample_value("voicewright_bargein_events_total")
             session.sink.start()  # the agent is speaking, so barge-in can fire
             frame = np.zeros(512, dtype=np.float32)
             for _ in range(10):  # 10 * 32 ms = 320 ms > 200 ms min_speech
                 session._on_audio_frame(frame)
-            after_interrupt = REGISTRY.get_sample_value("cloudpso_bargein_events_total")
+            after_interrupt = REGISTRY.get_sample_value("voicewright_bargein_events_total")
             assert after_interrupt == before + 1, "barge-in was not counted exactly once"
 
             # Once interrupted, further speech in the same turn must not recount.
             for _ in range(5):
                 session._on_audio_frame(frame)
-            assert REGISTRY.get_sample_value("cloudpso_bargein_events_total") == after_interrupt
+            assert REGISTRY.get_sample_value("voicewright_bargein_events_total") == after_interrupt
         finally:
             await session.close()
 

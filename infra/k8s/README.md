@@ -1,10 +1,10 @@
 # infra/k8s
 
-Raw Kubernetes manifests for the CloudPSO Voice Agent.
+Raw Kubernetes manifests for the Voicewright Voice Agent.
 
 | File | Contents |
 |---|---|
-| `namespace.yaml` | `cloudpso` namespace, restricted Pod Security Admission |
+| `namespace.yaml` | `voicewright` namespace, restricted Pod Security Admission |
 | `configmap.yaml` | non-secret config, mirroring docker-compose.yml's env |
 | `secret.example.yaml` | **template only** — `secretKeyRef` contract, no values |
 | `backend-core.yaml` | Deployment + Service (HTTP 8000, gRPC 50051) |

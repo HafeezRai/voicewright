@@ -78,7 +78,7 @@ export default defineConfig({
         BACKEND_CORE_GRPC_ENABLED: "false",
         BACKEND_CORE_VAD_BACKEND: "energy",
         BACKEND_CORE_LOG_LEVEL: "WARNING",
-        CLOUDEPSO_CORS_ALLOW_ORIGINS: CORS_ORIGIN,
+        VOICEWRIGHT_CORS_ALLOW_ORIGINS: CORS_ORIGIN,
       },
     },
     {
@@ -90,10 +90,10 @@ export default defineConfig({
       env: {
         AI_ENGINE_GRPC_ENABLED: "false",
         AI_ENGINE_LOG_LEVEL: "WARNING",
-        CLOUDEPSO_CORS_ALLOW_ORIGINS: CORS_ORIGIN,
+        VOICEWRIGHT_CORS_ALLOW_ORIGINS: CORS_ORIGIN,
         // Throwaway agent store: the builder spec creates and deletes agents,
         // and it must not scribble on whatever the developer has configured.
-        AI_ENGINE_AGENT_DB: "/tmp/cloudpso-e2e-agents.db",
+        AI_ENGINE_AGENT_DB: "/tmp/voicewright-e2e-agents.db",
       },
     },
     {

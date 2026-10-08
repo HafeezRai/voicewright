@@ -1,7 +1,7 @@
 apiVersion: v2
-name: cloudpso
+name: voicewright
 description: |
-  CloudPSO Voice Agent — WebRTC gateway, STT/LLM/TTS pipeline, dashboard and
+  Voicewright Voice Agent — WebRTC gateway, STT/LLM/TTS pipeline, dashboard and
   (optionally) a Triton inference server.
 type: application
 # Chart version: bump when templates/values change.
@@ -17,10 +17,10 @@ keywords:
   - llm
   - tts
   - triton
-home: https://github.com/cloudpso/cloudpso-voice-agent
+home: https://github.com/voicewright/voicewright-voice-agent
 sources:
-  - https://github.com/cloudpso/cloudpso-voice-agent
+  - https://github.com/voicewright/voicewright-voice-agent
 maintainers:
-  - name: CloudPSO Platform
+  - name: Voicewright Platform
 annotations:
   category: AI/MachineLearning

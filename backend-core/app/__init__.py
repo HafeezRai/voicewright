@@ -1,4 +1,4 @@
-"""CloudPSO Voice Agent — backend-core application package.
+"""Voicewright Voice Agent — backend-core application package.
 
 Phase 1 scope: importable app skeleton + configuration layer only.
 Real WebRTC gateway, WebSocket management and barge-in land in Phase 2.

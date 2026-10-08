@@ -5,9 +5,9 @@
 apiVersion: 1
 
 providers:
-  - name: CloudPSO
+  - name: Voicewright
     orgId: 1
-    folder: CloudPSO
+    folder: Voicewright
     type: file
     disableDeletion: false
     # Re-read the directory periodically so a changed dashboard JSON is picked

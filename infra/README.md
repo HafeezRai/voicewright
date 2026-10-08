@@ -1,7 +1,7 @@
 # infra
 
 Phase 5. Kubernetes manifests, a Helm chart, Prometheus scrape + alert rules,
-Grafana dashboards and the CI pipeline for the CloudPSO Voice Agent.
+Grafana dashboards and the CI pipeline for the Voicewright Voice Agent.
 
 ## What is validated vs. what has been executed
 
@@ -11,10 +11,10 @@ follows is deliberately blunt about which category each artifact is in.
 | Artifact | Status | Evidence (exact command → result) |
 |---|---|---|
 | `k8s/*.yaml` (raw manifests) | **EXECUTED (validate)** | `kubectl kustomize infra/k8s` → 18 resources; `kubeconform -strict` → **18 valid, 0 invalid, 0 errors** |
-| `helm/cloudpso/` chart | **EXECUTED (lint + render)** | `helm lint` → 0 failed (4 value sets); `helm template` → 13/11/17/20 resources |
+| `helm/voicewright/` chart | **EXECUTED (lint + render)** | `helm lint` → 0 failed (4 value sets); `helm template` → 13/11/17/20 resources |
 | Rendered Helm output | **EXECUTED (validate)** | `kubeconform -strict` over all rendered sets → **58 valid, 0 invalid, 3 skipped** (ServiceMonitor CRDs) |
 | `prometheus/prometheus.yml` | **EXECUTED (validate)** | `promtool check config` → SUCCESS |
-| `prometheus/rules/cloudpso.rules.yml` | **EXECUTED (validate)** | `promtool check rules` → SUCCESS, 16 rules |
+| `prometheus/rules/voicewright.rules.yml` | **EXECUTED (validate)** | `promtool check rules` → SUCCESS, 16 rules |
 | `grafana/dashboards/*.json` | **EXECUTED (validate)** | `infra/tests/test_observability.py` → 5 passed; every metric cross-checked against the apps' `metrics.py` |
 | `.github/workflows/ci.yml` | **EXECUTED (parse)** | Parses as YAML; job commands are the ones run by hand in this repo |
 | `.github/workflows/ci.yml` — actually run on GitHub | **NOT EXECUTED** | No runner here; the workflow has never run |
@@ -31,7 +31,7 @@ what the table says.
 ```
 infra/
 ├── k8s/                  raw manifests + kustomization.yaml
-├── helm/cloudpso/        the chart (values.yaml + per-env overlays)
+├── helm/voicewright/        the chart (values.yaml + per-env overlays)
 ├── prometheus/           scrape config + rules/ (+ Alertmanager placeholder)
 ├── grafana/              dashboards (JSON) + provisioning
 └── tests/                dashboard/alert ↔ metric cross-checks
@@ -48,11 +48,11 @@ kubectl apply -k infra/k8s
 Helm (preferred — everything is parameterised):
 
 ```bash
-helm install cloudpso infra/helm/cloudpso -f infra/helm/cloudpso/values-staging.yaml
-helm install cloudpso infra/helm/cloudpso -f infra/helm/cloudpso/values-production.yaml
+helm install voicewright infra/helm/voicewright -f infra/helm/voicewright/values-staging.yaml
+helm install voicewright infra/helm/voicewright -f infra/helm/voicewright/values-production.yaml
 ```
 
-Both paths expect a `cloudpso-secrets` Secret to already exist (see
+Both paths expect a `voicewright-secrets` Secret to already exist (see
 `k8s/secret.example.yaml`); the chart does not create one unless
 `secrets.create=true`, which is only for throwaway environments.
 
@@ -82,10 +82,10 @@ Probes are wired to the **actual** health endpoints, not placeholders:
 
 ```bash
 kubectl kustomize infra/k8s | kubeconform -strict -summary -ignore-missing-schemas -
-helm lint infra/helm/cloudpso
-helm template cloudpso infra/helm/cloudpso | kubeconform -strict -summary -ignore-missing-schemas -
+helm lint infra/helm/voicewright
+helm template voicewright infra/helm/voicewright | kubeconform -strict -summary -ignore-missing-schemas -
 promtool check config infra/prometheus/prometheus.yml
-promtool check rules  infra/prometheus/rules/cloudpso.rules.yml
+promtool check rules  infra/prometheus/rules/voicewright.rules.yml
 ai-engine/.venv/bin/python -m pytest -o addopts="" infra/tests/
 ```
 

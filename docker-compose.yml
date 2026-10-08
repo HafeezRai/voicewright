@@ -1,22 +1,22 @@
-# CloudPSO Voice Agent — Phase 1 local stack.
+# Voicewright Voice Agent — Phase 1 local stack.
 # Skeleton only: services build and expose health endpoints; no pipeline logic.
 # All values are .env-driven with sane defaults (no secrets committed).
 
-name: cloudpso
+name: voicewright
 
 services:
   backend-core:
     build:
       context: ./backend-core
       dockerfile: Dockerfile
-    image: cloudpso/backend-core:dev
+    image: voicewright/backend-core:dev
     # Values come from `.env` (auto-loaded by compose for interpolation) with
     # defaults below. No env_file directive: it would hard-fail when `.env` is
     # absent, and every variable it would carry is enumerated explicitly here.
     environment:
-      CLOUDEPSO_ENV: ${CLOUDEPSO_ENV:-development}
-      CLOUDEPSO_LOG_LEVEL: ${CLOUDEPSO_LOG_LEVEL:-INFO}
-      CLOUDEPSO_CONFIG_PREFIX: ${CLOUDEPSO_CONFIG_PREFIX:-cloudpso}
+      VOICEWRIGHT_ENV: ${VOICEWRIGHT_ENV:-development}
+      VOICEWRIGHT_LOG_LEVEL: ${VOICEWRIGHT_LOG_LEVEL:-INFO}
+      VOICEWRIGHT_CONFIG_PREFIX: ${VOICEWRIGHT_CONFIG_PREFIX:-voicewright}
       BACKEND_CORE_HOST: ${BACKEND_CORE_HOST:-0.0.0.0}
       # Container-internal bind ports are fixed; the host-published ports below
       # are what BACKEND_CORE_PORT / BACKEND_CORE_GRPC_PORT configure.
@@ -25,7 +25,7 @@ services:
       # How backend-core reaches ai-engine inside the compose network.
       AI_ENGINE_URL: ${AI_ENGINE_URL:-http://ai-engine:8001}
       # Phase 4: browser origins allowed to call the HTTP API (CORS).
-      CLOUDEPSO_CORS_ALLOW_ORIGINS: ${CLOUDEPSO_CORS_ALLOW_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
+      VOICEWRIGHT_CORS_ALLOW_ORIGINS: ${VOICEWRIGHT_CORS_ALLOW_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
     ports:
       - "${BACKEND_CORE_PORT:-8000}:8000"
       - "${BACKEND_CORE_GRPC_PORT:-50051}:50051"
@@ -33,18 +33,18 @@ services:
       ai-engine:
         condition: service_healthy
     networks:
-      - cloudpso-net
+      - voicewright-net
     restart: unless-stopped
 
   ai-engine:
     build:
       context: ./ai-engine
       dockerfile: Dockerfile
-    image: cloudpso/ai-engine:dev
+    image: voicewright/ai-engine:dev
     environment:
-      CLOUDEPSO_ENV: ${CLOUDEPSO_ENV:-development}
-      CLOUDEPSO_LOG_LEVEL: ${CLOUDEPSO_LOG_LEVEL:-INFO}
-      CLOUDEPSO_CONFIG_PREFIX: ${CLOUDEPSO_CONFIG_PREFIX:-cloudpso}
+      VOICEWRIGHT_ENV: ${VOICEWRIGHT_ENV:-development}
+      VOICEWRIGHT_LOG_LEVEL: ${VOICEWRIGHT_LOG_LEVEL:-INFO}
+      VOICEWRIGHT_CONFIG_PREFIX: ${VOICEWRIGHT_CONFIG_PREFIX:-voicewright}
       AI_ENGINE_HOST: ${AI_ENGINE_HOST:-0.0.0.0}
       # Fixed in-container bind port; AI_ENGINE_PORT in .env sets the host port.
       AI_ENGINE_PORT: "8001"
@@ -65,7 +65,7 @@ services:
       AI_ENGINE_GRPC_ENABLED: ${AI_ENGINE_GRPC_ENABLED:-true}
       AI_ENGINE_GRPC_PORT: "50052"
       # Phase 4: browser origins allowed to call the HTTP API (CORS).
-      CLOUDEPSO_CORS_ALLOW_ORIGINS: ${CLOUDEPSO_CORS_ALLOW_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
+      VOICEWRIGHT_CORS_ALLOW_ORIGINS: ${VOICEWRIGHT_CORS_ALLOW_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
     ports:
       - "${AI_ENGINE_PORT:-8001}:8001"
       - "${AI_ENGINE_GRPC_PORT:-50052}:50052"
@@ -73,7 +73,7 @@ services:
       # Named volume keeps downloaded weights out of the git tree.
       - ai-engine-models:${AI_ENGINE_MODEL_CACHE:-/models}
     networks:
-      - cloudpso-net
+      - voicewright-net
     restart: unless-stopped
 
   frontend-dashboard:
@@ -85,7 +85,7 @@ services:
       args:
         VITE_BACKEND_CORE_URL: ${VITE_BACKEND_CORE_URL:-http://localhost:8000}
         VITE_AI_ENGINE_URL: ${VITE_AI_ENGINE_URL:-http://localhost:8001}
-    image: cloudpso/frontend-dashboard:dev
+    image: voicewright/frontend-dashboard:dev
     environment:
       VITE_BACKEND_CORE_URL: ${VITE_BACKEND_CORE_URL:-http://localhost:8000}
     ports:
@@ -93,7 +93,7 @@ services:
     depends_on:
       - backend-core
     networks:
-      - cloudpso-net
+      - voicewright-net
     restart: unless-stopped
 
   prometheus:
@@ -110,11 +110,11 @@ services:
       - ./infra/prometheus/rules:/etc/prometheus/rules:ro
       - prometheus-data:/prometheus
     networks:
-      - cloudpso-net
+      - voicewright-net
     restart: unless-stopped
 
 networks:
-  cloudpso-net:
+  voicewright-net:
     driver: bridge
 
 volumes:

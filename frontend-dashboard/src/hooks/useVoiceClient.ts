@@ -17,10 +17,10 @@ export interface UseVoiceClient {
   setAgentSpeaking(speaking: boolean): void;
 }
 
-/** Test/E2E handle published on `window.__cloudpsoVoice`. */
+/** Test/E2E handle published on `window.__voicewrightVoice`. */
 declare global {
   interface Window {
-    __cloudpsoVoice?: {
+    __voicewrightVoice?: {
       status: VoiceState["status"];
       ice: VoiceState["ice"];
       sessionId: string | null;
@@ -66,7 +66,7 @@ export function useVoiceClient(): UseVoiceClient {
 
   // Publish a compact snapshot for the Playwright end-to-end test.
   useEffect(() => {
-    window.__cloudpsoVoice = {
+    window.__voicewrightVoice = {
       status: state.status,
       ice: state.ice,
       sessionId: state.sessionId,

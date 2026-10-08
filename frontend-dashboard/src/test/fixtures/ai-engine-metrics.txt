@@ -16,163 +16,163 @@ python_gc_collections_total{generation="2"} 6.0
 # HELP python_info Python platform information
 # TYPE python_info gauge
 python_info{implementation="CPython",major="3",minor="11",patchlevel="5",version="3.11.5"} 1.0
-# HELP cloudpso_ai_stt_requests_total STT transcription requests, labelled by outcome.
-# TYPE cloudpso_ai_stt_requests_total counter
-# HELP cloudpso_ai_stt_latency_seconds Wall-clock time to transcribe one utterance.
-# TYPE cloudpso_ai_stt_latency_seconds histogram
-cloudpso_ai_stt_latency_seconds_bucket{le="0.005"} 0.0
-cloudpso_ai_stt_latency_seconds_bucket{le="0.01"} 0.0
-cloudpso_ai_stt_latency_seconds_bucket{le="0.025"} 0.0
-cloudpso_ai_stt_latency_seconds_bucket{le="0.05"} 0.0
-cloudpso_ai_stt_latency_seconds_bucket{le="0.1"} 0.0
-cloudpso_ai_stt_latency_seconds_bucket{le="0.25"} 0.0
-cloudpso_ai_stt_latency_seconds_bucket{le="0.5"} 0.0
-cloudpso_ai_stt_latency_seconds_bucket{le="1.0"} 0.0
-cloudpso_ai_stt_latency_seconds_bucket{le="2.5"} 0.0
-cloudpso_ai_stt_latency_seconds_bucket{le="5.0"} 0.0
-cloudpso_ai_stt_latency_seconds_bucket{le="10.0"} 0.0
-cloudpso_ai_stt_latency_seconds_bucket{le="+Inf"} 0.0
-cloudpso_ai_stt_latency_seconds_count 0.0
-cloudpso_ai_stt_latency_seconds_sum 0.0
-# HELP cloudpso_ai_stt_latency_seconds_created Wall-clock time to transcribe one utterance.
-# TYPE cloudpso_ai_stt_latency_seconds_created gauge
-cloudpso_ai_stt_latency_seconds_created 1.7911113288344839e+09
-# HELP cloudpso_ai_stt_audio_seconds Duration of audio submitted to STT, per request.
-# TYPE cloudpso_ai_stt_audio_seconds histogram
-cloudpso_ai_stt_audio_seconds_bucket{le="0.5"} 0.0
-cloudpso_ai_stt_audio_seconds_bucket{le="1.0"} 0.0
-cloudpso_ai_stt_audio_seconds_bucket{le="2.0"} 0.0
-cloudpso_ai_stt_audio_seconds_bucket{le="5.0"} 0.0
-cloudpso_ai_stt_audio_seconds_bucket{le="10.0"} 0.0
-cloudpso_ai_stt_audio_seconds_bucket{le="30.0"} 0.0
-cloudpso_ai_stt_audio_seconds_bucket{le="60.0"} 0.0
-cloudpso_ai_stt_audio_seconds_bucket{le="120.0"} 0.0
-cloudpso_ai_stt_audio_seconds_bucket{le="+Inf"} 0.0
-cloudpso_ai_stt_audio_seconds_count 0.0
-cloudpso_ai_stt_audio_seconds_sum 0.0
-# HELP cloudpso_ai_stt_audio_seconds_created Duration of audio submitted to STT, per request.
-# TYPE cloudpso_ai_stt_audio_seconds_created gauge
-cloudpso_ai_stt_audio_seconds_created 1.7911113288345191e+09
-# HELP cloudpso_ai_llm_requests_total LLM generation requests, labelled by provider and outcome.
-# TYPE cloudpso_ai_llm_requests_total counter
-cloudpso_ai_llm_requests_total{provider="ollama",status="ok"} 2.0
-# HELP cloudpso_ai_llm_requests_created LLM generation requests, labelled by provider and outcome.
-# TYPE cloudpso_ai_llm_requests_created gauge
-cloudpso_ai_llm_requests_created{provider="ollama",status="ok"} 1.7911113444666119e+09
-# HELP cloudpso_ai_llm_latency_seconds Wall-clock time to generate one reply.
-# TYPE cloudpso_ai_llm_latency_seconds histogram
-cloudpso_ai_llm_latency_seconds_bucket{provider="ollama",le="0.005"} 0.0
-cloudpso_ai_llm_latency_seconds_bucket{provider="ollama",le="0.01"} 1.0
-cloudpso_ai_llm_latency_seconds_bucket{provider="ollama",le="0.025"} 1.0
-cloudpso_ai_llm_latency_seconds_bucket{provider="ollama",le="0.05"} 1.0
-cloudpso_ai_llm_latency_seconds_bucket{provider="ollama",le="0.1"} 1.0
-cloudpso_ai_llm_latency_seconds_bucket{provider="ollama",le="0.25"} 1.0
-cloudpso_ai_llm_latency_seconds_bucket{provider="ollama",le="0.5"} 1.0
-cloudpso_ai_llm_latency_seconds_bucket{provider="ollama",le="1.0"} 1.0
-cloudpso_ai_llm_latency_seconds_bucket{provider="ollama",le="2.5"} 1.0
-cloudpso_ai_llm_latency_seconds_bucket{provider="ollama",le="5.0"} 1.0
-cloudpso_ai_llm_latency_seconds_bucket{provider="ollama",le="10.0"} 2.0
-cloudpso_ai_llm_latency_seconds_bucket{provider="ollama",le="+Inf"} 2.0
-cloudpso_ai_llm_latency_seconds_count{provider="ollama"} 2.0
-cloudpso_ai_llm_latency_seconds_sum{provider="ollama"} 5.219418541993946
-# HELP cloudpso_ai_llm_latency_seconds_created Wall-clock time to generate one reply.
-# TYPE cloudpso_ai_llm_latency_seconds_created gauge
-cloudpso_ai_llm_latency_seconds_created{provider="ollama"} 1.791111344466578e+09
-# HELP cloudpso_ai_llm_first_token_seconds Time from request to the first streamed token, labelled by provider.
-# TYPE cloudpso_ai_llm_first_token_seconds histogram
-cloudpso_ai_llm_first_token_seconds_bucket{provider="ollama",le="0.05"} 0.0
-cloudpso_ai_llm_first_token_seconds_bucket{provider="ollama",le="0.1"} 0.0
-cloudpso_ai_llm_first_token_seconds_bucket{provider="ollama",le="0.25"} 1.0
-cloudpso_ai_llm_first_token_seconds_bucket{provider="ollama",le="0.5"} 2.0
-cloudpso_ai_llm_first_token_seconds_bucket{provider="ollama",le="1.0"} 2.0
-cloudpso_ai_llm_first_token_seconds_bucket{provider="ollama",le="2.5"} 2.0
-cloudpso_ai_llm_first_token_seconds_bucket{provider="ollama",le="5.0"} 2.0
-cloudpso_ai_llm_first_token_seconds_bucket{provider="ollama",le="10.0"} 2.0
-cloudpso_ai_llm_first_token_seconds_bucket{provider="ollama",le="30.0"} 2.0
-cloudpso_ai_llm_first_token_seconds_bucket{provider="ollama",le="60.0"} 2.0
-cloudpso_ai_llm_first_token_seconds_bucket{provider="ollama",le="120.0"} 2.0
-cloudpso_ai_llm_first_token_seconds_bucket{provider="ollama",le="+Inf"} 2.0
-cloudpso_ai_llm_first_token_seconds_count{provider="ollama"} 2.0
-cloudpso_ai_llm_first_token_seconds_sum{provider="ollama"} 0.61
-# HELP cloudpso_ai_llm_tokens_total Tokens reported by the provider, labelled by provider and kind (prompt|completion).
-# TYPE cloudpso_ai_llm_tokens_total counter
-cloudpso_ai_llm_tokens_total{provider="ollama",kind="prompt"} 42.0
-cloudpso_ai_llm_tokens_total{provider="ollama",kind="completion"} 118.0
-# HELP cloudpso_ai_llm_cancelled_total Generations abandoned early by a barge-in cancel.
-# TYPE cloudpso_ai_llm_cancelled_total counter
-cloudpso_ai_llm_cancelled_total{provider="ollama"} 0.0
-# HELP cloudpso_ai_tts_requests_total TTS synthesis requests, labelled by outcome (ok|cancelled|error).
-# TYPE cloudpso_ai_tts_requests_total counter
-cloudpso_ai_tts_requests_total{status="ok"} 1.0
-# HELP cloudpso_ai_tts_requests_created TTS synthesis requests, labelled by outcome (ok|cancelled|error).
-# TYPE cloudpso_ai_tts_requests_created gauge
-cloudpso_ai_tts_requests_created{status="ok"} 1.79111134518821e+09
-# HELP cloudpso_ai_tts_latency_seconds Wall-clock time to synthesise one utterance.
-# TYPE cloudpso_ai_tts_latency_seconds histogram
-cloudpso_ai_tts_latency_seconds_bucket{le="0.005"} 0.0
-cloudpso_ai_tts_latency_seconds_bucket{le="0.01"} 0.0
-cloudpso_ai_tts_latency_seconds_bucket{le="0.025"} 0.0
-cloudpso_ai_tts_latency_seconds_bucket{le="0.05"} 0.0
-cloudpso_ai_tts_latency_seconds_bucket{le="0.1"} 0.0
-cloudpso_ai_tts_latency_seconds_bucket{le="0.25"} 0.0
-cloudpso_ai_tts_latency_seconds_bucket{le="0.5"} 0.0
-cloudpso_ai_tts_latency_seconds_bucket{le="1.0"} 1.0
-cloudpso_ai_tts_latency_seconds_bucket{le="2.5"} 1.0
-cloudpso_ai_tts_latency_seconds_bucket{le="5.0"} 1.0
-cloudpso_ai_tts_latency_seconds_bucket{le="10.0"} 1.0
-cloudpso_ai_tts_latency_seconds_bucket{le="+Inf"} 1.0
-cloudpso_ai_tts_latency_seconds_count 1.0
-cloudpso_ai_tts_latency_seconds_sum 0.6793297909898683
-# HELP cloudpso_ai_tts_latency_seconds_created Wall-clock time to synthesise one utterance.
-# TYPE cloudpso_ai_tts_latency_seconds_created gauge
-cloudpso_ai_tts_latency_seconds_created 1.7911113288345459e+09
-# HELP cloudpso_ai_tts_audio_seconds Duration of audio produced by TTS, per request.
-# TYPE cloudpso_ai_tts_audio_seconds histogram
-cloudpso_ai_tts_audio_seconds_bucket{le="0.5"} 0.0
-cloudpso_ai_tts_audio_seconds_bucket{le="1.0"} 0.0
-cloudpso_ai_tts_audio_seconds_bucket{le="2.0"} 0.0
-cloudpso_ai_tts_audio_seconds_bucket{le="5.0"} 1.0
-cloudpso_ai_tts_audio_seconds_bucket{le="10.0"} 1.0
-cloudpso_ai_tts_audio_seconds_bucket{le="30.0"} 1.0
-cloudpso_ai_tts_audio_seconds_bucket{le="60.0"} 1.0
-cloudpso_ai_tts_audio_seconds_bucket{le="+Inf"} 1.0
-cloudpso_ai_tts_audio_seconds_count 1.0
-cloudpso_ai_tts_audio_seconds_sum 2.01525
-# HELP cloudpso_ai_tts_audio_seconds_created Duration of audio produced by TTS, per request.
-# TYPE cloudpso_ai_tts_audio_seconds_created gauge
-cloudpso_ai_tts_audio_seconds_created 1.7911113288345642e+09
-# HELP cloudpso_ai_tts_cancelled_total Synthesis/playback runs stopped early by a barge-in cancel.
-# TYPE cloudpso_ai_tts_cancelled_total counter
-cloudpso_ai_tts_cancelled_total 0.0
-# HELP cloudpso_ai_tts_cancelled_created Synthesis/playback runs stopped early by a barge-in cancel.
-# TYPE cloudpso_ai_tts_cancelled_created gauge
-cloudpso_ai_tts_cancelled_created 1.7911113288345752e+09
-# HELP cloudpso_ai_pipeline_requests_total Full STT -> LLM -> TTS turns, labelled by outcome and LLM provider.
-# TYPE cloudpso_ai_pipeline_requests_total counter
-# HELP cloudpso_ai_pipeline_latency_seconds Wall-clock time for one full STT -> LLM -> TTS turn.
-# TYPE cloudpso_ai_pipeline_latency_seconds histogram
-cloudpso_ai_pipeline_latency_seconds_bucket{le="0.005"} 0.0
-cloudpso_ai_pipeline_latency_seconds_bucket{le="0.01"} 0.0
-cloudpso_ai_pipeline_latency_seconds_bucket{le="0.025"} 0.0
-cloudpso_ai_pipeline_latency_seconds_bucket{le="0.05"} 0.0
-cloudpso_ai_pipeline_latency_seconds_bucket{le="0.1"} 0.0
-cloudpso_ai_pipeline_latency_seconds_bucket{le="0.25"} 0.0
-cloudpso_ai_pipeline_latency_seconds_bucket{le="0.5"} 0.0
-cloudpso_ai_pipeline_latency_seconds_bucket{le="1.0"} 0.0
-cloudpso_ai_pipeline_latency_seconds_bucket{le="2.5"} 0.0
-cloudpso_ai_pipeline_latency_seconds_bucket{le="5.0"} 0.0
-cloudpso_ai_pipeline_latency_seconds_bucket{le="10.0"} 0.0
-cloudpso_ai_pipeline_latency_seconds_bucket{le="+Inf"} 0.0
-cloudpso_ai_pipeline_latency_seconds_count 0.0
-cloudpso_ai_pipeline_latency_seconds_sum 0.0
-# HELP cloudpso_ai_pipeline_latency_seconds_created Wall-clock time for one full STT -> LLM -> TTS turn.
-# TYPE cloudpso_ai_pipeline_latency_seconds_created gauge
-cloudpso_ai_pipeline_latency_seconds_created 1.7911113288345852e+09
-# HELP cloudpso_ai_grpc_audio_frames_total Audio frames received on the gRPC StreamAudio endpoint.
-# TYPE cloudpso_ai_grpc_audio_frames_total counter
-cloudpso_ai_grpc_audio_frames_total 0.0
-# HELP cloudpso_ai_grpc_audio_frames_created Audio frames received on the gRPC StreamAudio endpoint.
-# TYPE cloudpso_ai_grpc_audio_frames_created gauge
-cloudpso_ai_grpc_audio_frames_created 1.791111328834595e+09
-# HELP cloudpso_ai_grpc_events_total VoiceEvents emitted downstream, labelled by event kind.
-# TYPE cloudpso_ai_grpc_events_total counter
+# HELP voicewright_ai_stt_requests_total STT transcription requests, labelled by outcome.
+# TYPE voicewright_ai_stt_requests_total counter
+# HELP voicewright_ai_stt_latency_seconds Wall-clock time to transcribe one utterance.
+# TYPE voicewright_ai_stt_latency_seconds histogram
+voicewright_ai_stt_latency_seconds_bucket{le="0.005"} 0.0
+voicewright_ai_stt_latency_seconds_bucket{le="0.01"} 0.0
+voicewright_ai_stt_latency_seconds_bucket{le="0.025"} 0.0
+voicewright_ai_stt_latency_seconds_bucket{le="0.05"} 0.0
+voicewright_ai_stt_latency_seconds_bucket{le="0.1"} 0.0
+voicewright_ai_stt_latency_seconds_bucket{le="0.25"} 0.0
+voicewright_ai_stt_latency_seconds_bucket{le="0.5"} 0.0
+voicewright_ai_stt_latency_seconds_bucket{le="1.0"} 0.0
+voicewright_ai_stt_latency_seconds_bucket{le="2.5"} 0.0
+voicewright_ai_stt_latency_seconds_bucket{le="5.0"} 0.0
+voicewright_ai_stt_latency_seconds_bucket{le="10.0"} 0.0
+voicewright_ai_stt_latency_seconds_bucket{le="+Inf"} 0.0
+voicewright_ai_stt_latency_seconds_count 0.0
+voicewright_ai_stt_latency_seconds_sum 0.0
+# HELP voicewright_ai_stt_latency_seconds_created Wall-clock time to transcribe one utterance.
+# TYPE voicewright_ai_stt_latency_seconds_created gauge
+voicewright_ai_stt_latency_seconds_created 1.7911113288344839e+09
+# HELP voicewright_ai_stt_audio_seconds Duration of audio submitted to STT, per request.
+# TYPE voicewright_ai_stt_audio_seconds histogram
+voicewright_ai_stt_audio_seconds_bucket{le="0.5"} 0.0
+voicewright_ai_stt_audio_seconds_bucket{le="1.0"} 0.0
+voicewright_ai_stt_audio_seconds_bucket{le="2.0"} 0.0
+voicewright_ai_stt_audio_seconds_bucket{le="5.0"} 0.0
+voicewright_ai_stt_audio_seconds_bucket{le="10.0"} 0.0
+voicewright_ai_stt_audio_seconds_bucket{le="30.0"} 0.0
+voicewright_ai_stt_audio_seconds_bucket{le="60.0"} 0.0
+voicewright_ai_stt_audio_seconds_bucket{le="120.0"} 0.0
+voicewright_ai_stt_audio_seconds_bucket{le="+Inf"} 0.0
+voicewright_ai_stt_audio_seconds_count 0.0
+voicewright_ai_stt_audio_seconds_sum 0.0
+# HELP voicewright_ai_stt_audio_seconds_created Duration of audio submitted to STT, per request.
+# TYPE voicewright_ai_stt_audio_seconds_created gauge
+voicewright_ai_stt_audio_seconds_created 1.7911113288345191e+09
+# HELP voicewright_ai_llm_requests_total LLM generation requests, labelled by provider and outcome.
+# TYPE voicewright_ai_llm_requests_total counter
+voicewright_ai_llm_requests_total{provider="ollama",status="ok"} 2.0
+# HELP voicewright_ai_llm_requests_created LLM generation requests, labelled by provider and outcome.
+# TYPE voicewright_ai_llm_requests_created gauge
+voicewright_ai_llm_requests_created{provider="ollama",status="ok"} 1.7911113444666119e+09
+# HELP voicewright_ai_llm_latency_seconds Wall-clock time to generate one reply.
+# TYPE voicewright_ai_llm_latency_seconds histogram
+voicewright_ai_llm_latency_seconds_bucket{provider="ollama",le="0.005"} 0.0
+voicewright_ai_llm_latency_seconds_bucket{provider="ollama",le="0.01"} 1.0
+voicewright_ai_llm_latency_seconds_bucket{provider="ollama",le="0.025"} 1.0
+voicewright_ai_llm_latency_seconds_bucket{provider="ollama",le="0.05"} 1.0
+voicewright_ai_llm_latency_seconds_bucket{provider="ollama",le="0.1"} 1.0
+voicewright_ai_llm_latency_seconds_bucket{provider="ollama",le="0.25"} 1.0
+voicewright_ai_llm_latency_seconds_bucket{provider="ollama",le="0.5"} 1.0
+voicewright_ai_llm_latency_seconds_bucket{provider="ollama",le="1.0"} 1.0
+voicewright_ai_llm_latency_seconds_bucket{provider="ollama",le="2.5"} 1.0
+voicewright_ai_llm_latency_seconds_bucket{provider="ollama",le="5.0"} 1.0
+voicewright_ai_llm_latency_seconds_bucket{provider="ollama",le="10.0"} 2.0
+voicewright_ai_llm_latency_seconds_bucket{provider="ollama",le="+Inf"} 2.0
+voicewright_ai_llm_latency_seconds_count{provider="ollama"} 2.0
+voicewright_ai_llm_latency_seconds_sum{provider="ollama"} 5.219418541993946
+# HELP voicewright_ai_llm_latency_seconds_created Wall-clock time to generate one reply.
+# TYPE voicewright_ai_llm_latency_seconds_created gauge
+voicewright_ai_llm_latency_seconds_created{provider="ollama"} 1.791111344466578e+09
+# HELP voicewright_ai_llm_first_token_seconds Time from request to the first streamed token, labelled by provider.
+# TYPE voicewright_ai_llm_first_token_seconds histogram
+voicewright_ai_llm_first_token_seconds_bucket{provider="ollama",le="0.05"} 0.0
+voicewright_ai_llm_first_token_seconds_bucket{provider="ollama",le="0.1"} 0.0
+voicewright_ai_llm_first_token_seconds_bucket{provider="ollama",le="0.25"} 1.0
+voicewright_ai_llm_first_token_seconds_bucket{provider="ollama",le="0.5"} 2.0
+voicewright_ai_llm_first_token_seconds_bucket{provider="ollama",le="1.0"} 2.0
+voicewright_ai_llm_first_token_seconds_bucket{provider="ollama",le="2.5"} 2.0
+voicewright_ai_llm_first_token_seconds_bucket{provider="ollama",le="5.0"} 2.0
+voicewright_ai_llm_first_token_seconds_bucket{provider="ollama",le="10.0"} 2.0
+voicewright_ai_llm_first_token_seconds_bucket{provider="ollama",le="30.0"} 2.0
+voicewright_ai_llm_first_token_seconds_bucket{provider="ollama",le="60.0"} 2.0
+voicewright_ai_llm_first_token_seconds_bucket{provider="ollama",le="120.0"} 2.0
+voicewright_ai_llm_first_token_seconds_bucket{provider="ollama",le="+Inf"} 2.0
+voicewright_ai_llm_first_token_seconds_count{provider="ollama"} 2.0
+voicewright_ai_llm_first_token_seconds_sum{provider="ollama"} 0.61
+# HELP voicewright_ai_llm_tokens_total Tokens reported by the provider, labelled by provider and kind (prompt|completion).
+# TYPE voicewright_ai_llm_tokens_total counter
+voicewright_ai_llm_tokens_total{provider="ollama",kind="prompt"} 42.0
+voicewright_ai_llm_tokens_total{provider="ollama",kind="completion"} 118.0
+# HELP voicewright_ai_llm_cancelled_total Generations abandoned early by a barge-in cancel.
+# TYPE voicewright_ai_llm_cancelled_total counter
+voicewright_ai_llm_cancelled_total{provider="ollama"} 0.0
+# HELP voicewright_ai_tts_requests_total TTS synthesis requests, labelled by outcome (ok|cancelled|error).
+# TYPE voicewright_ai_tts_requests_total counter
+voicewright_ai_tts_requests_total{status="ok"} 1.0
+# HELP voicewright_ai_tts_requests_created TTS synthesis requests, labelled by outcome (ok|cancelled|error).
+# TYPE voicewright_ai_tts_requests_created gauge
+voicewright_ai_tts_requests_created{status="ok"} 1.79111134518821e+09
+# HELP voicewright_ai_tts_latency_seconds Wall-clock time to synthesise one utterance.
+# TYPE voicewright_ai_tts_latency_seconds histogram
+voicewright_ai_tts_latency_seconds_bucket{le="0.005"} 0.0
+voicewright_ai_tts_latency_seconds_bucket{le="0.01"} 0.0
+voicewright_ai_tts_latency_seconds_bucket{le="0.025"} 0.0
+voicewright_ai_tts_latency_seconds_bucket{le="0.05"} 0.0
+voicewright_ai_tts_latency_seconds_bucket{le="0.1"} 0.0
+voicewright_ai_tts_latency_seconds_bucket{le="0.25"} 0.0
+voicewright_ai_tts_latency_seconds_bucket{le="0.5"} 0.0
+voicewright_ai_tts_latency_seconds_bucket{le="1.0"} 1.0
+voicewright_ai_tts_latency_seconds_bucket{le="2.5"} 1.0
+voicewright_ai_tts_latency_seconds_bucket{le="5.0"} 1.0
+voicewright_ai_tts_latency_seconds_bucket{le="10.0"} 1.0
+voicewright_ai_tts_latency_seconds_bucket{le="+Inf"} 1.0
+voicewright_ai_tts_latency_seconds_count 1.0
+voicewright_ai_tts_latency_seconds_sum 0.6793297909898683
+# HELP voicewright_ai_tts_latency_seconds_created Wall-clock time to synthesise one utterance.
+# TYPE voicewright_ai_tts_latency_seconds_created gauge
+voicewright_ai_tts_latency_seconds_created 1.7911113288345459e+09
+# HELP voicewright_ai_tts_audio_seconds Duration of audio produced by TTS, per request.
+# TYPE voicewright_ai_tts_audio_seconds histogram
+voicewright_ai_tts_audio_seconds_bucket{le="0.5"} 0.0
+voicewright_ai_tts_audio_seconds_bucket{le="1.0"} 0.0
+voicewright_ai_tts_audio_seconds_bucket{le="2.0"} 0.0
+voicewright_ai_tts_audio_seconds_bucket{le="5.0"} 1.0
+voicewright_ai_tts_audio_seconds_bucket{le="10.0"} 1.0
+voicewright_ai_tts_audio_seconds_bucket{le="30.0"} 1.0
+voicewright_ai_tts_audio_seconds_bucket{le="60.0"} 1.0
+voicewright_ai_tts_audio_seconds_bucket{le="+Inf"} 1.0
+voicewright_ai_tts_audio_seconds_count 1.0
+voicewright_ai_tts_audio_seconds_sum 2.01525
+# HELP voicewright_ai_tts_audio_seconds_created Duration of audio produced by TTS, per request.
+# TYPE voicewright_ai_tts_audio_seconds_created gauge
+voicewright_ai_tts_audio_seconds_created 1.7911113288345642e+09
+# HELP voicewright_ai_tts_cancelled_total Synthesis/playback runs stopped early by a barge-in cancel.
+# TYPE voicewright_ai_tts_cancelled_total counter
+voicewright_ai_tts_cancelled_total 0.0
+# HELP voicewright_ai_tts_cancelled_created Synthesis/playback runs stopped early by a barge-in cancel.
+# TYPE voicewright_ai_tts_cancelled_created gauge
+voicewright_ai_tts_cancelled_created 1.7911113288345752e+09
+# HELP voicewright_ai_pipeline_requests_total Full STT -> LLM -> TTS turns, labelled by outcome and LLM provider.
+# TYPE voicewright_ai_pipeline_requests_total counter
+# HELP voicewright_ai_pipeline_latency_seconds Wall-clock time for one full STT -> LLM -> TTS turn.
+# TYPE voicewright_ai_pipeline_latency_seconds histogram
+voicewright_ai_pipeline_latency_seconds_bucket{le="0.005"} 0.0
+voicewright_ai_pipeline_latency_seconds_bucket{le="0.01"} 0.0
+voicewright_ai_pipeline_latency_seconds_bucket{le="0.025"} 0.0
+voicewright_ai_pipeline_latency_seconds_bucket{le="0.05"} 0.0
+voicewright_ai_pipeline_latency_seconds_bucket{le="0.1"} 0.0
+voicewright_ai_pipeline_latency_seconds_bucket{le="0.25"} 0.0
+voicewright_ai_pipeline_latency_seconds_bucket{le="0.5"} 0.0
+voicewright_ai_pipeline_latency_seconds_bucket{le="1.0"} 0.0
+voicewright_ai_pipeline_latency_seconds_bucket{le="2.5"} 0.0
+voicewright_ai_pipeline_latency_seconds_bucket{le="5.0"} 0.0
+voicewright_ai_pipeline_latency_seconds_bucket{le="10.0"} 0.0
+voicewright_ai_pipeline_latency_seconds_bucket{le="+Inf"} 0.0
+voicewright_ai_pipeline_latency_seconds_count 0.0
+voicewright_ai_pipeline_latency_seconds_sum 0.0
+# HELP voicewright_ai_pipeline_latency_seconds_created Wall-clock time for one full STT -> LLM -> TTS turn.
+# TYPE voicewright_ai_pipeline_latency_seconds_created gauge
+voicewright_ai_pipeline_latency_seconds_created 1.7911113288345852e+09
+# HELP voicewright_ai_grpc_audio_frames_total Audio frames received on the gRPC StreamAudio endpoint.
+# TYPE voicewright_ai_grpc_audio_frames_total counter
+voicewright_ai_grpc_audio_frames_total 0.0
+# HELP voicewright_ai_grpc_audio_frames_created Audio frames received on the gRPC StreamAudio endpoint.
+# TYPE voicewright_ai_grpc_audio_frames_created gauge
+voicewright_ai_grpc_audio_frames_created 1.791111328834595e+09
+# HELP voicewright_ai_grpc_events_total VoiceEvents emitted downstream, labelled by event kind.
+# TYPE voicewright_ai_grpc_events_total counter

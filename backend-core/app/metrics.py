@@ -12,30 +12,30 @@ from prometheus_client import Counter, Gauge
 
 # --- WebRTC sessions ---------------------------------------------------------
 ACTIVE_WEBRTC_SESSIONS = Gauge(
-    "cloudpso_active_webrtc_sessions",
+    "voicewright_active_webrtc_sessions",
     "Number of WebRTC peer sessions currently established.",
 )
 
 TOTAL_WEBRTC_SESSIONS = Counter(
-    "cloudpso_webrtc_sessions_total",
+    "voicewright_webrtc_sessions_total",
     "Total WebRTC peer sessions created since process start.",
 )
 
 # --- barge-in ---------------------------------------------------------------
 BARGEIN_EVENTS = Counter(
-    "cloudpso_bargein_events_total",
+    "voicewright_bargein_events_total",
     "Total barge-in (user interrupt) events emitted while the agent was speaking.",
 )
 
 # --- VAD --------------------------------------------------------------------
 VAD_FRAMES_PROCESSED = Counter(
-    "cloudpso_vad_frames_processed_total",
+    "voicewright_vad_frames_processed_total",
     "Audio frames classified by the VAD, labelled by backend and decision.",
     ["backend", "speech"],
 )
 
 # --- signalling -------------------------------------------------------------
 WS_CONNECTIONS = Gauge(
-    "cloudpso_signaling_connections",
+    "voicewright_signaling_connections",
     "Number of WebSocket signalling connections currently open.",
 )

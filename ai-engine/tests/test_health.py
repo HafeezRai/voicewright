@@ -18,9 +18,9 @@ from app.main import app
 client = TestClient(app)
 
 _CLEARED_VARS = (
-    "CLOUDEPSO_ENV",
-    "CLOUDEPSO_LOG_LEVEL",
-    "CLOUDEPSO_CONFIG_PREFIX",
+    "VOICEWRIGHT_ENV",
+    "VOICEWRIGHT_LOG_LEVEL",
+    "VOICEWRIGHT_CONFIG_PREFIX",
     "AI_ENGINE_HOST",
     "AI_ENGINE_PORT",
     "AI_ENGINE_MODEL_CACHE",
@@ -57,7 +57,7 @@ def test_settings_load_defaults_with_empty_env(monkeypatch: pytest.MonkeyPatch) 
     assert settings.service_name == "ai-engine"
     assert settings.env == "development"
     assert settings.log_level == "INFO"
-    assert settings.config_prefix == "cloudpso"
+    assert settings.config_prefix == "voicewright"
     assert settings.host == "0.0.0.0"
     assert settings.port == 8001
     assert settings.model_cache == "/models"
@@ -68,8 +68,8 @@ def test_settings_load_defaults_with_empty_env(monkeypatch: pytest.MonkeyPatch) 
 
 
 def test_settings_read_and_normalise_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("CLOUDEPSO_ENV", "production")
-    monkeypatch.setenv("CLOUDEPSO_LOG_LEVEL", "warning")  # lower-case on purpose
+    monkeypatch.setenv("VOICEWRIGHT_ENV", "production")
+    monkeypatch.setenv("VOICEWRIGHT_LOG_LEVEL", "warning")  # lower-case on purpose
     monkeypatch.setenv("AI_ENGINE_PORT", "9100")
     monkeypatch.setenv("AI_ENGINE_DEVICE", "CUDA")  # upper-case on purpose
     monkeypatch.setenv("AI_ENGINE_MODEL_CACHE", "/opt/models")

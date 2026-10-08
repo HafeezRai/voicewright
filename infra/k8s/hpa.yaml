@@ -3,15 +3,15 @@
 # Scale on CPU. The honest caveat: the operationally interesting signal for this
 # system is *concurrent WebRTC sessions* and p95 STT/LLM/TTS latency -- not CPU --
 # and neither is a Kubernetes resource metric. A production setup would scale on
-# a custom/external metric (e.g. cloudpso_active_webrtc_sessions via Prometheus
-# Adapter, or cloudpso_ai_stt_latency_seconds). CPU is the portable default that
+# a custom/external metric (e.g. voicewright_active_webrtc_sessions via Prometheus
+# Adapter, or voicewright_ai_stt_latency_seconds). CPU is the portable default that
 # works on any cluster; the Prometheus-backed variant is left as an explicit
 # follow-up rather than pretended to exist here.
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: backend-core
-  namespace: cloudpso
+  namespace: voicewright
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
@@ -37,7 +37,7 @@ apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: ai-engine
-  namespace: cloudpso
+  namespace: voicewright
 spec:
   scaleTargetRef:
     apiVersion: apps/v1

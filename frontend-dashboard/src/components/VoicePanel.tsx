@@ -31,7 +31,7 @@ export function VoicePanel({ voice }: { voice: UseVoiceClient }) {
   }, [remoteStream]);
 
   return (
-    <section className="rounded-2xl border border-cloudpso-line bg-cloudpso-panel p-5">
+    <section className="rounded-2xl border border-voicewright-line bg-voicewright-panel p-5">
       <header className="flex items-center justify-between">
         <h2 className="text-lg font-semibold text-slate-100">Voice session</h2>
         <div className="flex items-center gap-2">
@@ -51,7 +51,7 @@ export function VoicePanel({ voice }: { voice: UseVoiceClient }) {
           data-testid="start-call"
           onClick={() => void start()}
           disabled={live}
-          className="rounded-lg bg-cloudpso-accent px-4 py-2 text-sm font-medium text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
+          className="rounded-lg bg-voicewright-accent px-4 py-2 text-sm font-medium text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
         >
           Start call
         </button>
@@ -60,7 +60,7 @@ export function VoicePanel({ voice }: { voice: UseVoiceClient }) {
           data-testid="stop-call"
           onClick={stop}
           disabled={!live}
-          className="rounded-lg border border-cloudpso-line bg-cloudpso-panel2 px-4 py-2 text-sm font-medium text-slate-200 transition hover:border-cloudpso-err/60 disabled:cursor-not-allowed disabled:opacity-40"
+          className="rounded-lg border border-voicewright-line bg-voicewright-panel2 px-4 py-2 text-sm font-medium text-slate-200 transition hover:border-voicewright-err/60 disabled:cursor-not-allowed disabled:opacity-40"
         >
           End call
         </button>
@@ -69,7 +69,7 @@ export function VoicePanel({ voice }: { voice: UseVoiceClient }) {
           data-testid="toggle-agent-speaking"
           onClick={() => setAgentSpeaking(!state.agentSpeaking)}
           disabled={!canSpeak}
-          className="rounded-lg border border-cloudpso-line bg-cloudpso-panel2 px-4 py-2 text-sm font-medium text-slate-200 transition hover:border-cloudpso-accent/60 disabled:cursor-not-allowed disabled:opacity-40"
+          className="rounded-lg border border-voicewright-line bg-voicewright-panel2 px-4 py-2 text-sm font-medium text-slate-200 transition hover:border-voicewright-accent/60 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {state.agentSpeaking ? "Agent: speaking — stop" : "Simulate agent speaking"}
         </button>
@@ -80,8 +80,8 @@ export function VoicePanel({ voice }: { voice: UseVoiceClient }) {
         data-active={state.bargeInActive ? "true" : "false"}
         className={`mt-4 flex items-center justify-between rounded-xl border px-4 py-3 text-sm transition ${
           state.bargeInActive
-            ? "border-cloudpso-err/60 bg-cloudpso-err/10 text-cloudpso-err animate-pulse-ring"
-            : "border-cloudpso-line bg-cloudpso-panel2 text-cloudpso-muted"
+            ? "border-voicewright-err/60 bg-voicewright-err/10 text-voicewright-err animate-pulse-ring"
+            : "border-voicewright-line bg-voicewright-panel2 text-voicewright-muted"
         }`}
       >
         <span className="font-medium">
@@ -94,33 +94,33 @@ export function VoicePanel({ voice }: { voice: UseVoiceClient }) {
       </div>
 
       <dl className="mt-4 grid grid-cols-2 gap-3 text-xs">
-        <div className="rounded-lg border border-cloudpso-line bg-cloudpso-panel2 px-3 py-2">
-          <dt className="text-cloudpso-muted">Session</dt>
+        <div className="rounded-lg border border-voicewright-line bg-voicewright-panel2 px-3 py-2">
+          <dt className="text-voicewright-muted">Session</dt>
           <dd className="mt-0.5 truncate font-mono text-slate-200" data-testid="session-id">
             {state.sessionId ?? "—"}
           </dd>
         </div>
-        <div className="rounded-lg border border-cloudpso-line bg-cloudpso-panel2 px-3 py-2">
-          <dt className="text-cloudpso-muted">Microphone</dt>
+        <div className="rounded-lg border border-voicewright-line bg-voicewright-panel2 px-3 py-2">
+          <dt className="text-voicewright-muted">Microphone</dt>
           <dd className="mt-0.5 text-slate-200">{state.micGranted ? "granted" : "—"}</dd>
         </div>
       </dl>
 
       {state.error ? (
-        <p className="mt-3 rounded-lg border border-cloudpso-err/50 bg-cloudpso-err/10 px-3 py-2 text-xs text-cloudpso-err" data-testid="voice-error">
+        <p className="mt-3 rounded-lg border border-voicewright-err/50 bg-voicewright-err/10 px-3 py-2 text-xs text-voicewright-err" data-testid="voice-error">
           {state.error}
         </p>
       ) : null}
 
       <div className="mt-4">
-        <h3 className="text-xs uppercase tracking-wide text-cloudpso-muted">Signalling log</h3>
+        <h3 className="text-xs uppercase tracking-wide text-voicewright-muted">Signalling log</h3>
         <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto font-mono text-[11px] leading-relaxed">
           {state.log.length === 0 ? (
-            <li className="text-cloudpso-muted">no activity yet</li>
+            <li className="text-voicewright-muted">no activity yet</li>
           ) : (
             state.log.map((entry, index) => (
               <li key={`${entry.at}-${index}`} className="text-slate-300">
-                <span className={entry.direction === "in" ? "text-cloudpso-ok" : entry.direction === "out" ? "text-cloudpso-accent" : "text-cloudpso-muted"}>
+                <span className={entry.direction === "in" ? "text-voicewright-ok" : entry.direction === "out" ? "text-voicewright-accent" : "text-voicewright-muted"}>
                   {entry.direction === "in" ? "◀ in " : entry.direction === "out" ? "▶ out" : "• info"}
                 </span>{" "}
                 {entry.message}

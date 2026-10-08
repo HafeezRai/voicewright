@@ -1,75 +1,75 @@
-# Prometheus alerting + recording rules for the CloudPSO Voice Agent.
+# Prometheus alerting + recording rules for the Voicewright Voice Agent.
 #
 # Every metric referenced here is declared in backend-core/app/metrics.py or
 # ai-engine/app/metrics.py -- no invented series. Names match the emitters:
 #
-#   cloudpso_active_webrtc_sessions            gauge
-#   cloudpso_webrtc_sessions_total             counter
-#   cloudpso_bargein_events_total              counter
-#   cloudpso_vad_frames_processed_total        counter{backend,speech}
-#   cloudpso_signaling_connections             gauge
-#   cloudpso_ai_stt_requests_total             counter{status}
-#   cloudpso_ai_stt_latency_seconds            histogram
-#   cloudpso_ai_stt_audio_seconds              histogram
-#   cloudpso_ai_llm_requests_total             counter{provider,status}
-#   cloudpso_ai_llm_latency_seconds            histogram{provider}
-#   cloudpso_ai_llm_first_token_seconds        histogram{provider}
-#   cloudpso_ai_llm_tokens_total               counter{provider,kind}
-#   cloudpso_ai_llm_cancelled_total            counter{provider}
-#   cloudpso_ai_tts_requests_total             counter{status}
-#   cloudpso_ai_tts_latency_seconds            histogram
-#   cloudpso_ai_tts_cancelled_total            counter
-#   cloudpso_ai_pipeline_requests_total        counter{status,llm_provider}
-#   cloudpso_ai_pipeline_latency_seconds       histogram
-#   cloudpso_ai_grpc_audio_frames_total        counter
-#   cloudpso_ai_grpc_events_total              counter{kind}
+#   voicewright_active_webrtc_sessions            gauge
+#   voicewright_webrtc_sessions_total             counter
+#   voicewright_bargein_events_total              counter
+#   voicewright_vad_frames_processed_total        counter{backend,speech}
+#   voicewright_signaling_connections             gauge
+#   voicewright_ai_stt_requests_total             counter{status}
+#   voicewright_ai_stt_latency_seconds            histogram
+#   voicewright_ai_stt_audio_seconds              histogram
+#   voicewright_ai_llm_requests_total             counter{provider,status}
+#   voicewright_ai_llm_latency_seconds            histogram{provider}
+#   voicewright_ai_llm_first_token_seconds        histogram{provider}
+#   voicewright_ai_llm_tokens_total               counter{provider,kind}
+#   voicewright_ai_llm_cancelled_total            counter{provider}
+#   voicewright_ai_tts_requests_total             counter{status}
+#   voicewright_ai_tts_latency_seconds            histogram
+#   voicewright_ai_tts_cancelled_total            counter
+#   voicewright_ai_pipeline_requests_total        counter{status,llm_provider}
+#   voicewright_ai_pipeline_latency_seconds       histogram
+#   voicewright_ai_grpc_audio_frames_total        counter
+#   voicewright_ai_grpc_events_total              counter{kind}
 groups:
   # --- recording rules ------------------------------------------------------
   # Pre-compute the latency quantiles the dashboards and alerts both want, so
   # the (relatively expensive) histogram_quantile runs once per rule interval
   # rather than once per panel per refresh.
-  - name: cloudpso.latency
+  - name: voicewright.latency
     interval: 15s
     rules:
-      - record: cloudpso:stt_latency_p95_seconds
-        expr: histogram_quantile(0.95, sum by (le) (rate(cloudpso_ai_stt_latency_seconds_bucket[5m])))
-      - record: cloudpso:llm_latency_p95_seconds
-        expr: histogram_quantile(0.95, sum by (le) (rate(cloudpso_ai_llm_latency_seconds_bucket[5m])))
+      - record: voicewright:stt_latency_p95_seconds
+        expr: histogram_quantile(0.95, sum by (le) (rate(voicewright_ai_stt_latency_seconds_bucket[5m])))
+      - record: voicewright:llm_latency_p95_seconds
+        expr: histogram_quantile(0.95, sum by (le) (rate(voicewright_ai_llm_latency_seconds_bucket[5m])))
       # First-token latency, pre-computed like the rest: it is the metric whose
-      # regression means "the agent feels broken" (see CloudPSOLLMFirstTokenHighLatency).
-      - record: cloudpso:llm_first_token_p95_seconds
-        expr: histogram_quantile(0.95, sum by (le) (rate(cloudpso_ai_llm_first_token_seconds_bucket[5m])))
-      - record: cloudpso:tts_latency_p95_seconds
-        expr: histogram_quantile(0.95, sum by (le) (rate(cloudpso_ai_tts_latency_seconds_bucket[5m])))
-      - record: cloudpso:pipeline_latency_p95_seconds
-        expr: histogram_quantile(0.95, sum by (le) (rate(cloudpso_ai_pipeline_latency_seconds_bucket[5m])))
+      # regression means "the agent feels broken" (see VoicewrightLLMFirstTokenHighLatency).
+      - record: voicewright:llm_first_token_p95_seconds
+        expr: histogram_quantile(0.95, sum by (le) (rate(voicewright_ai_llm_first_token_seconds_bucket[5m])))
+      - record: voicewright:tts_latency_p95_seconds
+        expr: histogram_quantile(0.95, sum by (le) (rate(voicewright_ai_tts_latency_seconds_bucket[5m])))
+      - record: voicewright:pipeline_latency_p95_seconds
+        expr: histogram_quantile(0.95, sum by (le) (rate(voicewright_ai_pipeline_latency_seconds_bucket[5m])))
 
-  - name: cloudpso.throughput
+  - name: voicewright.throughput
     interval: 30s
     rules:
       # Audio seconds per second, not requests per second: a rate over audio
       # duration is the honest measure of STT/TTS load.
-      - record: cloudpso:stt_audio_seconds_rate
-        expr: sum(rate(cloudpso_ai_stt_audio_seconds_sum[5m])) / sum(rate(cloudpso_ai_stt_audio_seconds_count[5m]))
-      - record: cloudpso:tts_audio_seconds_rate
-        expr: sum(rate(cloudpso_ai_tts_audio_seconds_sum[5m])) / sum(rate(cloudpso_ai_tts_audio_seconds_count[5m]))
+      - record: voicewright:stt_audio_seconds_rate
+        expr: sum(rate(voicewright_ai_stt_audio_seconds_sum[5m])) / sum(rate(voicewright_ai_stt_audio_seconds_count[5m]))
+      - record: voicewright:tts_audio_seconds_rate
+        expr: sum(rate(voicewright_ai_tts_audio_seconds_sum[5m])) / sum(rate(voicewright_ai_tts_audio_seconds_count[5m]))
 
-  - name: cloudpso.errors
+  - name: voicewright.errors
     interval: 30s
     rules:
-      - record: cloudpso:stt_error_ratio
+      - record: voicewright:stt_error_ratio
         expr: |
-          sum(rate(cloudpso_ai_stt_requests_total{status!="ok"}[5m]))
-            / clamp_min(sum(rate(cloudpso_ai_stt_requests_total[5m])), 1e-9)
-      - record: cloudpso:pipeline_error_ratio
+          sum(rate(voicewright_ai_stt_requests_total{status!="ok"}[5m]))
+            / clamp_min(sum(rate(voicewright_ai_stt_requests_total[5m])), 1e-9)
+      - record: voicewright:pipeline_error_ratio
         expr: |
-          sum(rate(cloudpso_ai_pipeline_requests_total{status!="ok"}[5m]))
-            / clamp_min(sum(rate(cloudpso_ai_pipeline_requests_total[5m])), 1e-9)
+          sum(rate(voicewright_ai_pipeline_requests_total{status!="ok"}[5m]))
+            / clamp_min(sum(rate(voicewright_ai_pipeline_requests_total[5m])), 1e-9)
 
   # --- alerts ---------------------------------------------------------------
-  - name: cloudpso.alerts
+  - name: voicewright.alerts
     rules:
-      - alert: CloudPSOServiceDown
+      - alert: VoicewrightServiceDown
         expr: up{job=~"backend-core|ai-engine"} == 0
         for: 2m
         labels:
@@ -80,14 +80,14 @@ groups:
             Prometheus has failed to scrape {{ $labels.job }} for 2 minutes.
             Either the service is down or /metrics is unreachable.
 
-      - alert: CloudPSOPipelineHighLatency
+      - alert: VoicewrightPipelineHighLatency
         # The whole point of the system is an interactive turn. The old 1.5 s
         # budget was set when the middle stage was a ~30 ms intent classifier;
         # the stage is now a generative LLM, and a local llama3:8b turn is
         # seconds, not milliseconds. 6 s p95 is the "something is genuinely
         # wrong" line, and the LLM is almost always the dominant stage when it
         # trips -- STT and TTS both stay well under a second.
-        expr: cloudpso:pipeline_latency_p95_seconds > 6
+        expr: voicewright:pipeline_latency_p95_seconds > 6
         for: 5m
         labels:
           severity: warning
@@ -96,16 +96,16 @@ groups:
           description: >-
             p95 full-turn latency is {{ $value | humanizeDuration }} over the
             last 5 minutes. The LLM stage dominates the budget -- check
-            cloudpso:llm_latency_p95_seconds first, then stt/tts.
+            voicewright:llm_latency_p95_seconds first, then stt/tts.
 
-      - alert: CloudPSOLLMFirstTokenHighLatency
+      - alert: VoicewrightLLMFirstTokenHighLatency
         # First-token latency is the metric whose regression actually means "the
         # agent feels broken": total latency can be healthy while the user sits
         # in dead air waiting for the reply to start. A cold local llama3:8b load
         # is a handful of seconds; sustained first-token p95 above 3 s means the
         # model is reloading on every turn (keep_alive / warm-up broken) or the
         # endpoint is slow -- not merely that it is chatty.
-        expr: cloudpso:llm_first_token_p95_seconds > 3
+        expr: voicewright:llm_first_token_p95_seconds > 3
         for: 5m
         labels:
           severity: warning
@@ -117,8 +117,8 @@ groups:
             dead air before the agent begins to speak -- usually a model being
             reloaded every turn rather than a slow model.
 
-      - alert: CloudPSOSTTHighErrorRatio
-        expr: cloudpso:stt_error_ratio > 0.05
+      - alert: VoicewrightSTTHighErrorRatio
+        expr: voicewright:stt_error_ratio > 0.05
         for: 10m
         labels:
           severity: warning
@@ -126,8 +126,8 @@ groups:
           summary: "STT error ratio above 5%"
           description: "{{ $value | humanizePercentage }} of STT requests are failing."
 
-      - alert: CloudPSOPipelineHighErrorRatio
-        expr: cloudpso:pipeline_error_ratio > 0.05
+      - alert: VoicewrightPipelineHighErrorRatio
+        expr: voicewright:pipeline_error_ratio > 0.05
         for: 10m
         labels:
           severity: warning
@@ -135,10 +135,10 @@ groups:
           summary: "Full-pipeline error ratio above 5%"
           description: "{{ $value | humanizePercentage }} of pipeline turns are failing."
 
-      - alert: CloudPSONoActiveSessions
+      - alert: VoicewrightNoActiveSessions
         # A production voice gateway with zero sessions for 30 minutes is far
         # more likely to be broken than genuinely idle.
-        expr: sum(cloudpso_active_webrtc_sessions) == 0
+        expr: sum(voicewright_active_webrtc_sessions) == 0
         for: 30m
         labels:
           severity: info
@@ -146,13 +146,13 @@ groups:
           summary: "No active WebRTC sessions for 30 minutes"
           description: >-
             Either there is no traffic or the gateway can no longer accept
-            sessions. Confirm with cloudpso_webrtc_sessions_total (has it moved?)
-            and cloudpso_signaling_connections.
+            sessions. Confirm with voicewright_webrtc_sessions_total (has it moved?)
+            and voicewright_signaling_connections.
 
-      - alert: CloudPSOSignalingChurn
+      - alert: VoicewrightSignalingChurn
         # Sessions appearing without signalling connections (or vice versa)
         # points at a leak or a half-open WebSocket.
-        expr: sum(cloudpso_signaling_connections) == 0 and sum(cloudpso_active_webrtc_sessions) > 0
+        expr: sum(voicewright_signaling_connections) == 0 and sum(voicewright_active_webrtc_sessions) > 0
         for: 5m
         labels:
           severity: warning
@@ -162,13 +162,13 @@ groups:
             {{ $value }} sessions are open but no WebSocket signalling
             connections are registered -- check for leaked or half-open sockets.
 
-      - alert: CloudPSOHighBargeInRate
+      - alert: VoicewrightHighBargeInRate
         # Barge-in is a feature, but a rate this high usually means TTS is
         # talking over the user (bad turn detection) rather than users genuinely
         # interrupting.
         expr: |
-          sum(rate(cloudpso_bargein_events_total[10m]))
-            / clamp_min(sum(rate(cloudpso_ai_pipeline_requests_total[10m])), 1e-9) > 0.5
+          sum(rate(voicewright_bargein_events_total[10m]))
+            / clamp_min(sum(rate(voicewright_ai_pipeline_requests_total[10m])), 1e-9) > 0.5
         for: 10m
         labels:
           severity: info
@@ -178,10 +178,10 @@ groups:
             More than half of turns are being interrupted. Verify the VAD
             thresholds and that the agent is not mis-timing its replies.
 
-      - alert: CloudPSOVADBackendDegraded
+      - alert: VoicewrightVADBackendDegraded
         # backend-core falls back to the energy VAD if the Silero ONNX model is
         # unavailable; that is a silent quality regression unless it is alerted.
-        expr: sum(rate(cloudpso_vad_frames_processed_total{backend="energy"}[10m])) > 0
+        expr: sum(rate(voicewright_vad_frames_processed_total{backend="energy"}[10m])) > 0
         for: 10m
         labels:
           severity: warning

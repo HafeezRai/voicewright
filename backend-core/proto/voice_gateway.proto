@@ -1,4 +1,4 @@
-// CloudPSO Voice Agent — gateway <-> AI engine gRPC contract.
+// Voicewright Voice Agent — gateway <-> AI engine gRPC contract.
 //
 // Phase 2 defines the *gateway* surface: a bidirectional audio stream plus a
 // health/status probe. The transcript/synthesis events in the `VoiceEvent`
@@ -9,7 +9,7 @@
 // is committed under app/gen/ so the service builds without grpcio-tools.
 syntax = "proto3";
 
-package cloudpso.voice.v1;
+package voicewright.voice.v1;
 
 // Streaming audio ingress: client audio frames -> engine, engine results -> client.
 service VoiceGateway {

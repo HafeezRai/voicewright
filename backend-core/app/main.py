@@ -80,7 +80,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(
-    title="CloudPSO Voice Agent — backend-core",
+    title="Voicewright Voice Agent — backend-core",
     version="0.2.0",
     description="WebRTC gateway, WebSocket management and barge-in (Phase 2).",
     lifespan=lifespan,
@@ -90,7 +90,7 @@ app.state.session_manager = session_manager
 app.include_router(signaling_router)
 
 # CORS for the Phase 4 browser dashboard. Additive and off the frozen contract:
-# origins come from CLOUDEPSO_CORS_ALLOW_ORIGINS and default to the local
+# origins come from VOICEWRIGHT_CORS_ALLOW_ORIGINS and default to the local
 # dashboard only (never "*"). WebSockets are not subject to CORS, so /ws/signaling
 # is unaffected.
 app.add_middleware(

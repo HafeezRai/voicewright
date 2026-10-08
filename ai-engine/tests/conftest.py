@@ -44,7 +44,7 @@ os.environ.setdefault("AI_ENGINE_LOG_LEVEL", "WARNING")
 #: a throwaway file so the suite never touches a developer's real agents, and so
 #: the app-under-test and ad-hoc stores in tests share nothing.
 os.environ.setdefault(
-    "AI_ENGINE_AGENT_DB", str(Path(tempfile.mkdtemp(prefix="cloudpso-agents-")) / "agents.db")
+    "AI_ENGINE_AGENT_DB", str(Path(tempfile.mkdtemp(prefix="voicewright-agents-")) / "agents.db")
 )
 
 from app.cancellation import CancelToken

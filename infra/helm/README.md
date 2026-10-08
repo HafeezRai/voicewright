@@ -1,6 +1,6 @@
 # infra/helm
 
-A single Helm chart, `cloudpso`, packaging the whole stack.
+A single Helm chart, `voicewright`, packaging the whole stack.
 
 A single chart rather than one-per-service: the components share labels, a
 ConfigMap and an ingress, and a chart-per-service would mean three releases that
@@ -8,7 +8,7 @@ must be installed in order to be coherent. `values.yaml` groups settings per
 component so `--set backendCore.autoscaling.maxReplicas=12` still reads clearly.
 
 ```
-cloudpso/
+voicewright/
 ├── Chart.yaml
 ├── values.yaml                 # the contract: every template reads from here
 ├── values-staging.yaml         # 1 replica, RWO volume, no GPU, DEBUG logs
@@ -31,9 +31,9 @@ cloudpso/
 verification host.
 
 ```bash
-helm lint infra/helm/cloudpso                                              # 0 failed
-helm lint infra/helm/cloudpso -f infra/helm/cloudpso/values-staging.yaml  # 0 failed
-helm template cloudpso infra/helm/cloudpso | \
+helm lint infra/helm/voicewright                                              # 0 failed
+helm lint infra/helm/voicewright -f infra/helm/voicewright/values-staging.yaml  # 0 failed
+helm template voicewright infra/helm/voicewright | \
   kubeconform -strict -summary -ignore-missing-schemas -
 ```
 
@@ -45,7 +45,7 @@ schema).
 ## Installing
 
 ```bash
-helm install cloudpso infra/helm/cloudpso -f infra/helm/cloudpso/values-production.yaml
+helm install voicewright infra/helm/voicewright -f infra/helm/voicewright/values-production.yaml
 ```
 
 `secrets.create` defaults to **false**: credentials belong in an external secret

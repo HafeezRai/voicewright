@@ -3,9 +3,9 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "cloudpso-ai-engine"
+name = "voicewright-ai-engine"
 version = "0.3.0"
-description = "CloudPSO Voice Agent — ai-engine: STT -> LLM -> TTS pipeline."
+description = "Voicewright Voice Agent — ai-engine: STT -> LLM -> TTS pipeline."
 requires-python = ">=3.11,<3.12"
 # Kept mirrored with requirements.txt (the Dockerfile installs that file).
 dependencies = [

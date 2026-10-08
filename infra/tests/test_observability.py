@@ -3,7 +3,7 @@
 Two things are checked, neither of which needs a running Prometheus or Grafana:
 
 1. Every dashboard is valid JSON and every panel has a query.
-2. Every ``cloudpso_*`` metric referenced by a dashboard or an alert/recording
+2. Every ``voicewright_*`` metric referenced by a dashboard or an alert/recording
    rule **actually exists** -- it is declared in backend-core/app/metrics.py or
    ai-engine/app/metrics.py (histograms expanded to their ``_bucket``/``_sum``/
    ``_count`` series), or it is a recording rule defined in the rules file.
@@ -28,7 +28,7 @@ import pytest
 _INFRA = Path(__file__).resolve().parents[1]
 _REPO = _INFRA.parent
 _DASHBOARDS = sorted((_INFRA / "grafana" / "dashboards").glob("*.json"))
-_RULES = _INFRA / "prometheus" / "rules" / "cloudpso.rules.yml"
+_RULES = _INFRA / "prometheus" / "rules" / "voicewright.rules.yml"
 _METRIC_SOURCES = [
     _REPO / "backend-core" / "app" / "metrics.py",
     _REPO / "ai-engine" / "app" / "metrics.py",
@@ -37,12 +37,12 @@ _METRIC_SOURCES = [
 #: Histogram base metrics expose these derived series.
 _HIST_SUFFIXES = ("_bucket", "_sum", "_count")
 
-_NAME_RE = re.compile(r"\b(cloudpso_[a-z0-9_]+)")
-_RECORD_RE = re.compile(r"^\s*-\s*record:\s*(cloudpso:[a-z0-9_]+)", re.M)
+_NAME_RE = re.compile(r"\b(voicewright_[a-z0-9_]+)")
+_RECORD_RE = re.compile(r"^\s*-\s*record:\s*(voicewright:[a-z0-9_]+)", re.M)
 
 
 def declared_metrics() -> set[str]:
-    """Every ``cloudpso_*`` series the two services declare, histograms expanded."""
+    """Every ``voicewright_*`` series the two services declare, histograms expanded."""
     names: set[str] = set()
     for path in _METRIC_SOURCES:
         source = path.read_text()
@@ -104,7 +104,7 @@ def test_every_metric_reference_exists():
 
     # Recording-rule references (colon namespace) must be defined too.
     for source, expr in dashboard_queries():
-        for name in re.findall(r"\b(cloudpso:[a-z0-9_]+)", expr):
+        for name in re.findall(r"\b(voicewright:[a-z0-9_]+)", expr):
             if name not in recorded:
                 problems.append(f"{source}: unknown recording rule {name!r} in {expr!r}")
 
@@ -123,7 +123,7 @@ def test_alert_rules_reference_existing_metrics():
             base = next((name[: -len(s)] for s in _HIST_SUFFIXES if name.endswith(s)), name)
             if base not in declared:
                 problems.append(f"rules: unknown metric {name!r} in {expr.strip()!r}")
-        for name in re.findall(r"\b(cloudpso:[a-z0-9_]+)", expr):
+        for name in re.findall(r"\b(voicewright:[a-z0-9_]+)", expr):
             if name not in recorded:
                 problems.append(f"rules: unknown recording rule {name!r}")
     assert not problems, "rules reference metrics that do not exist:\n" + "\n".join(problems)

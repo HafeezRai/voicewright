@@ -238,19 +238,19 @@ export function AgentBuilder({ onSelect }: { onSelect?: (agent: Agent | null) =>
   return (
     <div className="flex flex-col gap-5" data-testid="agent-builder">
       {/* ---- create / edit ---- */}
-      <section className="rounded-xl border border-cloudpso-line bg-cloudpso-panel p-4">
+      <section className="rounded-xl border border-voicewright-line bg-voicewright-panel p-4">
         <header className="mb-3">
           <h2 className="text-sm font-semibold">
             {editingId ? "Edit agent" : "Create an agent"}
           </h2>
-          <p className="text-[11px] text-cloudpso-muted">
+          <p className="text-[11px] text-voicewright-muted">
             A role, a prompt, a voice and some knowledge — that is the whole agent.
           </p>
         </header>
 
         {!editingId ? (
           <div className="mb-4">
-            <p className="mb-1.5 text-[10px] uppercase tracking-wide text-cloudpso-muted">
+            <p className="mb-1.5 text-[10px] uppercase tracking-wide text-voicewright-muted">
               Start from an example
             </p>
             <div className="flex flex-wrap gap-1.5">
@@ -261,7 +261,7 @@ export function AgentBuilder({ onSelect }: { onSelect?: (agent: Agent | null) =>
                   title={preset.blurb}
                   data-testid={`preset-${preset.id}`}
                   onClick={() => applyPreset(preset.id)}
-                  className="rounded-full border border-cloudpso-line px-2.5 py-1 text-[11px] text-cloudpso-muted transition hover:border-cloudpso-accent/60 hover:text-slate-100"
+                  className="rounded-full border border-voicewright-line px-2.5 py-1 text-[11px] text-voicewright-muted transition hover:border-voicewright-accent/60 hover:text-slate-100"
                 >
                   {preset.label}
                 </button>
@@ -271,29 +271,29 @@ export function AgentBuilder({ onSelect }: { onSelect?: (agent: Agent | null) =>
         ) : null}
 
         <div className="grid gap-3 sm:grid-cols-2">
-          <label className="flex flex-col gap-1 text-[11px] text-cloudpso-muted">
+          <label className="flex flex-col gap-1 text-[11px] text-voicewright-muted">
             Name
             <input
               value={form.name}
               onChange={(event) => set("name", event.target.value)}
               placeholder="Downtown clinic receptionist"
               data-testid="agent-name"
-              className="rounded-lg border border-cloudpso-line bg-cloudpso-panel2 px-3 py-1.5 text-sm text-slate-100 outline-none focus:border-cloudpso-accent"
+              className="rounded-lg border border-voicewright-line bg-voicewright-panel2 px-3 py-1.5 text-sm text-slate-100 outline-none focus:border-voicewright-accent"
             />
           </label>
-          <label className="flex flex-col gap-1 text-[11px] text-cloudpso-muted">
+          <label className="flex flex-col gap-1 text-[11px] text-voicewright-muted">
             Role
             <input
               value={form.role}
               onChange={(event) => set("role", event.target.value)}
               placeholder="clinic receptionist"
               data-testid="agent-role"
-              className="rounded-lg border border-cloudpso-line bg-cloudpso-panel2 px-3 py-1.5 text-sm text-slate-100 outline-none focus:border-cloudpso-accent"
+              className="rounded-lg border border-voicewright-line bg-voicewright-panel2 px-3 py-1.5 text-sm text-slate-100 outline-none focus:border-voicewright-accent"
             />
           </label>
         </div>
 
-        <label className="mt-3 flex flex-col gap-1 text-[11px] text-cloudpso-muted">
+        <label className="mt-3 flex flex-col gap-1 text-[11px] text-voicewright-muted">
           System prompt — who the agent is and how it speaks
           <textarea
             value={form.system_prompt}
@@ -301,32 +301,32 @@ export function AgentBuilder({ onSelect }: { onSelect?: (agent: Agent | null) =>
             rows={4}
             placeholder="You are a friendly clinic receptionist. Reply in one short spoken sentence, plain prose. Never use markdown."
             data-testid="agent-prompt"
-            className="resize-y rounded-lg border border-cloudpso-line bg-cloudpso-panel2 px-3 py-2 text-sm text-slate-100 outline-none focus:border-cloudpso-accent"
+            className="resize-y rounded-lg border border-voicewright-line bg-voicewright-panel2 px-3 py-2 text-sm text-slate-100 outline-none focus:border-voicewright-accent"
           />
         </label>
 
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          <label className="flex flex-col gap-1 text-[11px] text-cloudpso-muted">
+          <label className="flex flex-col gap-1 text-[11px] text-voicewright-muted">
             Voice
             <select
               value={form.voice}
               onChange={(event) => set("voice", event.target.value)}
               data-testid="agent-voice"
-              className="rounded-lg border border-cloudpso-line bg-cloudpso-panel2 px-3 py-1.5 text-sm text-slate-100 outline-none focus:border-cloudpso-accent"
+              className="rounded-lg border border-voicewright-line bg-voicewright-panel2 px-3 py-1.5 text-sm text-slate-100 outline-none focus:border-voicewright-accent"
             >
               <option value={WIRED_VOICE}>Piper en_US · amy (low) — wired</option>
             </select>
-            <span className="text-[10px] text-cloudpso-muted">
+            <span className="text-[10px] text-voicewright-muted">
               Only this voice is loaded today; more are a TTS-side addition, not a form change.
             </span>
           </label>
-          <label className="flex flex-col gap-1 text-[11px] text-cloudpso-muted">
+          <label className="flex flex-col gap-1 text-[11px] text-voicewright-muted">
             Language
             <select
               value={form.language}
               onChange={(event) => set("language", event.target.value)}
               data-testid="agent-language"
-              className="rounded-lg border border-cloudpso-line bg-cloudpso-panel2 px-3 py-1.5 text-sm text-slate-100 outline-none focus:border-cloudpso-accent"
+              className="rounded-lg border border-voicewright-line bg-voicewright-panel2 px-3 py-1.5 text-sm text-slate-100 outline-none focus:border-voicewright-accent"
             >
               {LANGUAGES.map((language) => (
                 <option key={language.value} value={language.value}>
@@ -335,25 +335,25 @@ export function AgentBuilder({ onSelect }: { onSelect?: (agent: Agent | null) =>
                 </option>
               ))}
             </select>
-            <span className="text-[10px] text-cloudpso-muted">
+            <span className="text-[10px] text-voicewright-muted">
               Stored per agent. Non-English speech is not wired end to end yet.
             </span>
           </label>
         </div>
 
-        <label className="mt-3 flex flex-col gap-1 text-[11px] text-cloudpso-muted">
+        <label className="mt-3 flex flex-col gap-1 text-[11px] text-voicewright-muted">
           Greeting — spoken before the caller says anything (optional)
           <input
             value={form.greeting}
             onChange={(event) => set("greeting", event.target.value)}
             placeholder="Hello! How may I help you today?"
             data-testid="agent-greeting"
-            className="rounded-lg border border-cloudpso-line bg-cloudpso-panel2 px-3 py-1.5 text-sm text-slate-100 outline-none focus:border-cloudpso-accent"
+            className="rounded-lg border border-voicewright-line bg-voicewright-panel2 px-3 py-1.5 text-sm text-slate-100 outline-none focus:border-voicewright-accent"
           />
         </label>
 
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          <label className="flex flex-col gap-1 text-[11px] text-cloudpso-muted">
+          <label className="flex flex-col gap-1 text-[11px] text-voicewright-muted">
             Model
             <select
               value={selectedOptionKey}
@@ -366,7 +366,7 @@ export function AgentBuilder({ onSelect }: { onSelect?: (agent: Agent | null) =>
                 }));
               }}
               data-testid="agent-model"
-              className="rounded-lg border border-cloudpso-line bg-cloudpso-panel2 px-3 py-1.5 text-sm text-slate-100 outline-none focus:border-cloudpso-accent"
+              className="rounded-lg border border-voicewright-line bg-voicewright-panel2 px-3 py-1.5 text-sm text-slate-100 outline-none focus:border-voicewright-accent"
             >
               <option value="">
                 Service default
@@ -386,17 +386,17 @@ export function AgentBuilder({ onSelect }: { onSelect?: (agent: Agent | null) =>
         </div>
 
         <fieldset className="mt-3">
-          <legend className="text-[11px] text-cloudpso-muted">
+          <legend className="text-[11px] text-voicewright-muted">
             Tools this agent may call
           </legend>
           {toolWarning ? (
-            <p className="mt-1 text-[11px] text-cloudpso-warn" data-testid="tool-warning">
+            <p className="mt-1 text-[11px] text-voicewright-warn" data-testid="tool-warning">
               {toolWarning}
             </p>
           ) : null}
           <div className="mt-1.5 flex flex-wrap gap-1.5">
             {available.length === 0 ? (
-              <span className="text-[11px] text-cloudpso-muted">None available.</span>
+              <span className="text-[11px] text-voicewright-muted">None available.</span>
             ) : null}
             {available.map((tool) => {
               const on = chosenTools.includes(tool.name);
@@ -410,8 +410,8 @@ export function AgentBuilder({ onSelect }: { onSelect?: (agent: Agent | null) =>
                   onClick={() => toggleTool(tool.name)}
                   className={`rounded-full border px-2.5 py-1 font-mono text-[11px] transition ${
                     on
-                      ? "border-cloudpso-accent/60 bg-cloudpso-accent/15 text-cloudpso-accent"
-                      : "border-cloudpso-line text-cloudpso-muted hover:text-slate-100"
+                      ? "border-voicewright-accent/60 bg-voicewright-accent/15 text-voicewright-accent"
+                      : "border-voicewright-line text-voicewright-muted hover:text-slate-100"
                   }`}
                 >
                   {tool.name}
@@ -427,7 +427,7 @@ export function AgentBuilder({ onSelect }: { onSelect?: (agent: Agent | null) =>
             onClick={() => void onSubmit()}
             disabled={busy}
             data-testid="save-agent"
-            className="rounded-lg bg-cloudpso-accent px-3 py-1.5 text-sm font-medium text-white transition hover:bg-cloudpso-accent/90 disabled:opacity-40"
+            className="rounded-lg bg-voicewright-accent px-3 py-1.5 text-sm font-medium text-white transition hover:bg-voicewright-accent/90 disabled:opacity-40"
           >
             {editingId ? "Save changes" : "Create agent"}
           </button>
@@ -435,17 +435,17 @@ export function AgentBuilder({ onSelect }: { onSelect?: (agent: Agent | null) =>
             <button
               type="button"
               onClick={resetForm}
-              className="rounded-lg border border-cloudpso-line px-3 py-1.5 text-sm text-cloudpso-muted transition hover:text-slate-100"
+              className="rounded-lg border border-voicewright-line px-3 py-1.5 text-sm text-voicewright-muted transition hover:text-slate-100"
             >
               Cancel
             </button>
           )}
-          {error && <span className="text-[11px] text-cloudpso-err">{error}</span>}
+          {error && <span className="text-[11px] text-voicewright-err">{error}</span>}
         </div>
       </section>
 
       {/* ---- list ---- */}
-      <section className="rounded-xl border border-cloudpso-line bg-cloudpso-panel p-4">
+      <section className="rounded-xl border border-voicewright-line bg-voicewright-panel p-4">
         <header className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-semibold">Agents</h2>
           <div className="flex items-center gap-2">
@@ -454,14 +454,14 @@ export function AgentBuilder({ onSelect }: { onSelect?: (agent: Agent | null) =>
               type="button"
               onClick={resetForm}
               data-testid="new-agent"
-              className="rounded-full border border-cloudpso-line px-2.5 py-1 text-[11px] text-cloudpso-muted transition hover:border-cloudpso-accent/60 hover:text-slate-100"
+              className="rounded-full border border-voicewright-line px-2.5 py-1 text-[11px] text-voicewright-muted transition hover:border-voicewright-accent/60 hover:text-slate-100"
             >
               + New
             </button>
           </div>
         </header>
         {agents.length === 0 ? (
-          <p className="text-[11px] text-cloudpso-muted">
+          <p className="text-[11px] text-voicewright-muted">
             No agents yet — create one above, or start from the example below.
           </p>
         ) : (
@@ -473,8 +473,8 @@ export function AgentBuilder({ onSelect }: { onSelect?: (agent: Agent | null) =>
                   key={agent.id}
                   className={`rounded-lg border p-3 transition ${
                     active
-                      ? "border-cloudpso-accent/60 bg-cloudpso-accent/10"
-                      : "border-cloudpso-line bg-cloudpso-panel2"
+                      ? "border-voicewright-accent/60 bg-voicewright-accent/10"
+                      : "border-voicewright-line bg-voicewright-panel2"
                   }`}
                 >
                   <div className="flex flex-wrap items-start justify-between gap-2">
@@ -484,7 +484,7 @@ export function AgentBuilder({ onSelect }: { onSelect?: (agent: Agent | null) =>
                       className="min-w-0 text-left"
                     >
                       <p className="truncate text-sm font-medium">{agent.name}</p>
-                      <p className="truncate text-[11px] text-cloudpso-muted">
+                      <p className="truncate text-[11px] text-voicewright-muted">
                         {agent.role || "no role set"}
                         {agent.system_prompt ? "" : " · no prompt"}
                       </p>
@@ -493,7 +493,7 @@ export function AgentBuilder({ onSelect }: { onSelect?: (agent: Agent | null) =>
                       <button
                         type="button"
                         onClick={() => onEdit(agent)}
-                        className="text-cloudpso-muted transition hover:text-slate-100"
+                        className="text-voicewright-muted transition hover:text-slate-100"
                         title="Reset the form to this agent's saved values"
                       >
                         Revert
@@ -501,7 +501,7 @@ export function AgentBuilder({ onSelect }: { onSelect?: (agent: Agent | null) =>
                       <button
                         type="button"
                         onClick={() => void onDelete(agent)}
-                        className="text-cloudpso-muted transition hover:text-cloudpso-err"
+                        className="text-voicewright-muted transition hover:text-voicewright-err"
                       >
                         Delete
                       </button>

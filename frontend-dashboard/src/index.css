@@ -10,7 +10,7 @@
   }
 
   body {
-    @apply bg-cloudpso-bg text-slate-100 antialiased;
+    @apply bg-voicewright-bg text-slate-100 antialiased;
     margin: 0;
   }
 }

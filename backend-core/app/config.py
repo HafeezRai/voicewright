@@ -34,9 +34,9 @@ class Settings(BaseSettings):
 
     # --- shared / cross-service ---------------------------------------------
     service_name: str = "backend-core"
-    config_prefix: str = Field(default="cloudpso", alias="CLOUDEPSO_CONFIG_PREFIX")
-    env: Environment = Field(default="development", alias="CLOUDEPSO_ENV")
-    log_level: LogLevel = Field(default="INFO", alias="CLOUDEPSO_LOG_LEVEL")
+    config_prefix: str = Field(default="voicewright", alias="VOICEWRIGHT_CONFIG_PREFIX")
+    env: Environment = Field(default="development", alias="VOICEWRIGHT_ENV")
+    log_level: LogLevel = Field(default="INFO", alias="VOICEWRIGHT_LOG_LEVEL")
 
     # --- HTTP / WebSocket server --------------------------------------------
     host: str = Field(default="0.0.0.0", alias="BACKEND_CORE_HOST")
@@ -90,7 +90,7 @@ class Settings(BaseSettings):
     # config typo away from exposing the service to any page a user visits.
     cors_allow_origins: str = Field(
         default="http://localhost:5173,http://127.0.0.1:5173",
-        alias="CLOUDEPSO_CORS_ALLOW_ORIGINS",
+        alias="VOICEWRIGHT_CORS_ALLOW_ORIGINS",
     )
 
     @field_validator("log_level", mode="before")

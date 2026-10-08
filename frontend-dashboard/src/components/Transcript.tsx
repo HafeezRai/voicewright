@@ -57,15 +57,15 @@ export function Transcript({
         ))}
         {/* A quiet "still here" marker, the way a chat shows a typing indicator. */}
         {live ? (
-          <p className="flex items-center gap-1.5 text-[11px] text-cloudpso-muted">
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cloudpso-ok" />
+          <p className="flex items-center gap-1.5 text-[11px] text-voicewright-muted">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-voicewright-ok" />
             listening
           </p>
         ) : null}
       </div>
 
       {nothingYet ? (
-        <div className="m-auto max-w-sm text-center text-xs leading-relaxed text-cloudpso-muted">
+        <div className="m-auto max-w-sm text-center text-xs leading-relaxed text-voicewright-muted">
           {emptyHint ?? "Start the call and just talk. The agent replies when you stop."}
         </div>
       ) : null}
@@ -79,11 +79,11 @@ function UserBubble({ turn }: { turn: ConversationTurn }) {
   return (
     <div className="flex justify-end">
       <div className="max-w-[80%]">
-        <p className="mb-1 text-right text-[10px] uppercase tracking-wide text-cloudpso-muted">
+        <p className="mb-1 text-right text-[10px] uppercase tracking-wide text-voicewright-muted">
           You
         </p>
         <p
-          className="rounded-2xl rounded-br-sm bg-cloudpso-accent/20 px-4 py-2 text-sm text-slate-100"
+          className="rounded-2xl rounded-br-sm bg-voicewright-accent/20 px-4 py-2 text-sm text-slate-100"
           data-testid="turn-transcript"
         >
           {turn.transcript}
@@ -108,10 +108,10 @@ function AgentBubble({
   return (
     <div className="flex justify-start">
       <div className="max-w-[80%]">
-        <p className="mb-1 text-[10px] uppercase tracking-wide text-cloudpso-muted">Agent</p>
-        <p className="rounded-2xl rounded-bl-sm bg-cloudpso-panel2 px-4 py-2 text-sm text-slate-100">
+        <p className="mb-1 text-[10px] uppercase tracking-wide text-voicewright-muted">Agent</p>
+        <p className="rounded-2xl rounded-bl-sm bg-voicewright-panel2 px-4 py-2 text-sm text-slate-100">
           {body}
-          {streaming ? <span className="ml-0.5 animate-pulse text-cloudpso-accent">▍</span> : null}
+          {streaming ? <span className="ml-0.5 animate-pulse text-voicewright-accent">▍</span> : null}
         </p>
         {turn && !greeting ? <Caption turn={turn} /> : null}
       </div>
@@ -123,11 +123,11 @@ function AgentBubble({
 function Caption({ turn }: { turn: ConversationTurn }) {
   if (turn.totalMs === null && !turn.model && turn.knowledgeChunks === 0) return null;
   return (
-    <p className="mt-1 font-mono text-[10px] text-cloudpso-muted">
+    <p className="mt-1 font-mono text-[10px] text-voicewright-muted">
       {turn.knowledgeChunks > 0 ? (
-        <span className="text-cloudpso-ok">grounded · {turn.knowledgeChunks}</span>
+        <span className="text-voicewright-ok">grounded · {turn.knowledgeChunks}</span>
       ) : (
-        <span className="text-cloudpso-warn">ungrounded</span>
+        <span className="text-voicewright-warn">ungrounded</span>
       )}
       {turn.firstAudioMs !== null ? <> · first audio {turn.firstAudioMs}ms</> : null}
       {turn.totalMs !== null ? <> · turn {turn.totalMs}ms</> : null}
@@ -149,13 +149,13 @@ function ToolRow({ call }: { call: ToolInvocation }) {
     .join(" ");
   return (
     <div className="flex justify-start pl-2" data-testid="turn-tool">
-      <div className="max-w-[80%] rounded-lg border border-dashed border-cloudpso-line px-3 py-1.5 font-mono text-[10px]">
-        <p className="text-cloudpso-muted">
-          <span className="text-cloudpso-accent">tool</span> {call.name}
+      <div className="max-w-[80%] rounded-lg border border-dashed border-voicewright-line px-3 py-1.5 font-mono text-[10px]">
+        <p className="text-voicewright-muted">
+          <span className="text-voicewright-accent">tool</span> {call.name}
           {args ? `(${args})` : "()"}
         </p>
         {call.content !== undefined ? (
-          <p className={call.ok === false ? "text-cloudpso-err" : "text-cloudpso-muted/80"}>
+          <p className={call.ok === false ? "text-voicewright-err" : "text-voicewright-muted/80"}>
             {call.ok === false ? "✗" : "→"} {call.content}
           </p>
         ) : null}
@@ -168,7 +168,7 @@ function Note({ turn }: { turn: ConversationTurn }) {
   return (
     <p
       data-testid="turn-note"
-      className={`text-[11px] ${turn.reply ? "text-cloudpso-warn" : "text-cloudpso-err"}`}
+      className={`text-[11px] ${turn.reply ? "text-voicewright-warn" : "text-voicewright-err"}`}
     >
       {turn.error}
     </p>

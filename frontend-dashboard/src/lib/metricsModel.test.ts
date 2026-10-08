@@ -16,9 +16,9 @@ describe("summarise against the real captured fixtures", () => {
     // The worst failure mode here is silent: a fixture left on the old names
     // makes the dashboard show 0 requests and NaN latencies with no error, and
     // every other assertion still passes. Pin the names directly.
-    expect(aiEngineFixture).toContain("cloudpso_ai_llm_requests_total");
-    expect(aiEngineFixture).toContain("cloudpso_ai_llm_latency_seconds");
-    expect(aiEngineFixture).not.toContain("cloudpso_ai_nlu");
+    expect(aiEngineFixture).toContain("voicewright_ai_llm_requests_total");
+    expect(aiEngineFixture).toContain("voicewright_ai_llm_latency_seconds");
+    expect(aiEngineFixture).not.toContain("voicewright_ai_nlu");
   });
 
   it("pulls the WebRTC/barge-in figures from backend-core", () => {
@@ -43,13 +43,13 @@ describe("summarise against the real captured fixtures", () => {
     // healthy system. `empty` (retrieval found nothing) and `cancelled` (the
     // user barged in) are outcomes, not failures.
     const text = [
-      '# TYPE cloudpso_ai_knowledge_retrievals_total counter',
-      'cloudpso_ai_knowledge_retrievals_total{status="ok"} 3.0',
-      'cloudpso_ai_knowledge_retrievals_total{status="empty"} 2.0',
-      'cloudpso_ai_knowledge_retrievals_created{status="empty"} 1.7912637259712079e+09',
-      'cloudpso_ai_pipeline_requests_total{status="cancelled"} 4.0',
-      'cloudpso_ai_pipeline_requests_total{status="fallback"} 5.0',
-      'cloudpso_ai_pipeline_requests_total{status="error"} 2.0',
+      '# TYPE voicewright_ai_knowledge_retrievals_total counter',
+      'voicewright_ai_knowledge_retrievals_total{status="ok"} 3.0',
+      'voicewright_ai_knowledge_retrievals_total{status="empty"} 2.0',
+      'voicewright_ai_knowledge_retrievals_created{status="empty"} 1.7912637259712079e+09',
+      'voicewright_ai_pipeline_requests_total{status="cancelled"} 4.0',
+      'voicewright_ai_pipeline_requests_total{status="fallback"} 5.0',
+      'voicewright_ai_pipeline_requests_total{status="error"} 2.0',
     ].join("\n");
 
     const empty = parseService("");
@@ -59,7 +59,7 @@ describe("summarise against the real captured fixtures", () => {
     // The timestamp series alone would have produced a nine-digit "error" count.
     expect(
       summarise(
-        parseService('cloudpso_ai_knowledge_retrievals_created{status="empty"} 1.7912637259712079e+09'),
+        parseService('voicewright_ai_knowledge_retrievals_created{status="empty"} 1.7912637259712079e+09'),
         empty,
       ).errorCount,
     ).toBe(0);
@@ -73,7 +73,7 @@ describe("summarise against the real captured fixtures", () => {
   });
 
   it("exposes labelled values for arbitrary series lookups", () => {
-    const okCount = labelledValue(parseService(aiEngineFixture), "cloudpso_ai_llm_requests_total", {
+    const okCount = labelledValue(parseService(aiEngineFixture), "voicewright_ai_llm_requests_total", {
       provider: "ollama",
       status: "ok",
     });

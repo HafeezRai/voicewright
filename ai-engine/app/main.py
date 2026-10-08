@@ -249,14 +249,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(
-    title="CloudPSO Voice Agent — ai-engine",
+    title="Voicewright Voice Agent — ai-engine",
     version="0.3.0",
     description="STT -> LLM -> TTS pipeline service.",
     lifespan=lifespan,
 )
 
 # CORS for the Phase 4 browser dashboard. Additive and off the frozen contract:
-# origins come from CLOUDEPSO_CORS_ALLOW_ORIGINS and default to the local
+# origins come from VOICEWRIGHT_CORS_ALLOW_ORIGINS and default to the local
 # dashboard only (never "*").
 app.add_middleware(
     CORSMiddleware,

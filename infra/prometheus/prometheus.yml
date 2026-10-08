@@ -1,7 +1,7 @@
-# CloudPSO Voice Agent — Prometheus scrape config.
+# Voicewright Voice Agent — Prometheus scrape config.
 #
 # Phase 1 created this file with backend-core + ai-engine jobs; Phase 5 adds the
-# alerting/recording rules (rules/cloudpso.rules.yml) and an optional Triton job.
+# alerting/recording rules (rules/voicewright.rules.yml) and an optional Triton job.
 #
 # Mounted read-only into the `prometheus` compose service at
 # /etc/prometheus/prometheus.yml (see docker-compose.yml). The rules directory
@@ -11,7 +11,7 @@ global:
   scrape_interval: 15s
   evaluation_interval: 15s
   external_labels:
-    cluster: cloudpso-local
+    cluster: voicewright-local
     env: development
 
 rule_files:
@@ -24,9 +24,9 @@ scrape_configs:
       - targets: ["localhost:9090"]
 
   # backend-core — WebRTC gateway / WebSocket / barge-in metrics.
-  # Series: cloudpso_active_webrtc_sessions, cloudpso_webrtc_sessions_total,
-  # cloudpso_bargein_events_total, cloudpso_vad_frames_processed_total,
-  # cloudpso_signaling_connections. Served by the app itself at /metrics.
+  # Series: voicewright_active_webrtc_sessions, voicewright_webrtc_sessions_total,
+  # voicewright_bargein_events_total, voicewright_vad_frames_processed_total,
+  # voicewright_signaling_connections. Served by the app itself at /metrics.
   - job_name: backend-core
     metrics_path: /metrics
     static_configs:
@@ -35,7 +35,7 @@ scrape_configs:
           service: backend-core
 
   # ai-engine — STT/LLM/TTS latency and throughput metrics.
-  # Series: cloudpso_ai_* (see ai-engine/app/metrics.py).
+  # Series: voicewright_ai_* (see ai-engine/app/metrics.py).
   - job_name: ai-engine
     metrics_path: /metrics
     static_configs:
@@ -46,7 +46,7 @@ scrape_configs:
   # Triton inference server (OPTIONAL — only when the GPU serving path is up; see
   # mlops-pipeline/triton_repo/docker-compose.triton.yml). Down by default in the local
   # stack, which surfaces as `up{job="triton"} == 0` rather than an error, and is
-  # excluded from CloudPSOServiceDown. Triton's own metrics are not cloudpso_*;
+  # excluded from VoicewrightServiceDown. Triton's own metrics are not voicewright_*;
   # no alert in rules/ depends on them.
   - job_name: triton
     metrics_path: /metrics

@@ -4,8 +4,8 @@ export default {
   theme: {
     extend: {
       colors: {
-        // CloudPSO dashboard palette (Phase 4).
-        cloudpso: {
+        // Voicewright dashboard palette (Phase 4).
+        voicewright: {
           bg: "#0b1020",
           panel: "#151b30",
           panel2: "#1b2340",

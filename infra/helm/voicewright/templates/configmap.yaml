@@ -1,22 +1,22 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ include "cloudpso.fullname" . }}-config
+  name: {{ include "voicewright.fullname" . }}-config
   labels:
-    {{- include "cloudpso.labels" . | nindent 4 }}
+    {{- include "voicewright.labels" . | nindent 4 }}
 data:
   # Values shared by every component and the per-component blocks below mirror
   # the variables docker-compose.yml sets for the same images.
-  CLOUDEPSO_ENV: {{ .Values.global.environment | quote }}
-  CLOUDEPSO_LOG_LEVEL: {{ .Values.config.logLevel | quote }}
-  CLOUDEPSO_CONFIG_PREFIX: {{ .Values.config.configPrefix | quote }}
-  CLOUDEPSO_CORS_ALLOW_ORIGINS: {{ .Values.config.corsAllowOrigins | quote }}
+  VOICEWRIGHT_ENV: {{ .Values.global.environment | quote }}
+  VOICEWRIGHT_LOG_LEVEL: {{ .Values.config.logLevel | quote }}
+  VOICEWRIGHT_CONFIG_PREFIX: {{ .Values.config.configPrefix | quote }}
+  VOICEWRIGHT_CORS_ALLOW_ORIGINS: {{ .Values.config.corsAllowOrigins | quote }}
 
   {{- if .Values.backendCore.enabled }}
   BACKEND_CORE_HOST: "0.0.0.0"
   BACKEND_CORE_PORT: {{ .Values.backendCore.service.port | quote }}
   BACKEND_CORE_GRPC_PORT: {{ .Values.backendCore.service.grpcPort | quote }}
-  AI_ENGINE_URL: "http://{{ include "cloudpso.fullname" . }}-ai-engine:{{ .Values.aiEngine.service.port }}"
+  AI_ENGINE_URL: "http://{{ include "voicewright.fullname" . }}-ai-engine:{{ .Values.aiEngine.service.port }}"
   {{- end }}
 
   {{- if .Values.aiEngine.enabled }}

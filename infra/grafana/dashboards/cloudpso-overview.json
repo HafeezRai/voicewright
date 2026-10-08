@@ -1,8 +1,8 @@
 {
-  "uid": "cloudpso-overview",
-  "title": "CloudPSO \u2014 Voice Gateway",
+  "uid": "voicewright-overview",
+  "title": "Voicewright \u2014 Voice Gateway",
   "tags": [
-    "cloudpso",
+    "voicewright",
     "webrtc"
   ],
   "timezone": "browser",
@@ -89,7 +89,7 @@
       "id": 2,
       "type": "stat",
       "title": "Active WebRTC sessions",
-      "description": "cloudpso_active_webrtc_sessions \u2014 peer sessions currently established.",
+      "description": "voicewright_active_webrtc_sessions \u2014 peer sessions currently established.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -133,7 +133,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(cloudpso_active_webrtc_sessions)",
+          "expr": "sum(voicewright_active_webrtc_sessions)",
           "datasource": {
             "type": "prometheus",
             "uid": "prometheus"
@@ -146,7 +146,7 @@
       "id": 3,
       "type": "stat",
       "title": "Signaling connections",
-      "description": "cloudpso_signaling_connections \u2014 open WebSocket signalling connections.",
+      "description": "voicewright_signaling_connections \u2014 open WebSocket signalling connections.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -190,7 +190,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(cloudpso_signaling_connections)",
+          "expr": "sum(voicewright_signaling_connections)",
           "datasource": {
             "type": "prometheus",
             "uid": "prometheus"
@@ -203,7 +203,7 @@
       "id": 4,
       "type": "stat",
       "title": "Sessions created (5m rate)",
-      "description": "cloudpso_webrtc_sessions_total \u2014 new sessions per second.",
+      "description": "voicewright_webrtc_sessions_total \u2014 new sessions per second.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -247,7 +247,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(rate(cloudpso_webrtc_sessions_total[5m]))",
+          "expr": "sum(rate(voicewright_webrtc_sessions_total[5m]))",
           "datasource": {
             "type": "prometheus",
             "uid": "prometheus"
@@ -260,7 +260,7 @@
       "id": 5,
       "type": "stat",
       "title": "Barge-ins (5m rate)",
-      "description": "cloudpso_bargein_events_total \u2014 user interrupts per second.",
+      "description": "voicewright_bargein_events_total \u2014 user interrupts per second.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -304,7 +304,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(rate(cloudpso_bargein_events_total[5m]))",
+          "expr": "sum(rate(voicewright_bargein_events_total[5m]))",
           "datasource": {
             "type": "prometheus",
             "uid": "prometheus"
@@ -355,7 +355,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(cloudpso_active_webrtc_sessions)",
+          "expr": "sum(voicewright_active_webrtc_sessions)",
           "datasource": {
             "type": "prometheus",
             "uid": "prometheus"
@@ -364,7 +364,7 @@
         },
         {
           "refId": "B",
-          "expr": "sum(cloudpso_signaling_connections)",
+          "expr": "sum(voicewright_signaling_connections)",
           "datasource": {
             "type": "prometheus",
             "uid": "prometheus"
@@ -415,7 +415,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(rate(cloudpso_webrtc_sessions_total[5m]))",
+          "expr": "sum(rate(voicewright_webrtc_sessions_total[5m]))",
           "datasource": {
             "type": "prometheus",
             "uid": "prometheus"
@@ -428,7 +428,7 @@
       "id": 12,
       "type": "timeseries",
       "title": "VAD frames by decision",
-      "description": "cloudpso_vad_frames_processed_total{speech} \u2014 speech vs silence classification rate.",
+      "description": "voicewright_vad_frames_processed_total{speech} \u2014 speech vs silence classification rate.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -466,7 +466,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (speech) (rate(cloudpso_vad_frames_processed_total[5m]))",
+          "expr": "sum by (speech) (rate(voicewright_vad_frames_processed_total[5m]))",
           "datasource": {
             "type": "prometheus",
             "uid": "prometheus"
@@ -517,7 +517,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (backend) (rate(cloudpso_vad_frames_processed_total[5m]))",
+          "expr": "sum by (backend) (rate(voicewright_vad_frames_processed_total[5m]))",
           "datasource": {
             "type": "prometheus",
             "uid": "prometheus"

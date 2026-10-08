@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-# CloudPSO Voice Agent — backend-core (Phase 2: WebRTC + VAD + barge-in).
+# Voicewright Voice Agent — backend-core (Phase 2: WebRTC + VAD + barge-in).
 FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \

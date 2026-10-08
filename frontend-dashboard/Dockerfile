@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-# CloudPSO Voice Agent — frontend-dashboard (Phase 1 skeleton).
+# Voicewright Voice Agent — frontend-dashboard (Phase 1 skeleton).
 # Multi-stage: build the Vite bundle, serve the static output with nginx.
 
 # --- stage 1: build ---------------------------------------------------------

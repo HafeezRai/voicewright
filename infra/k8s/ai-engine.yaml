@@ -9,7 +9,7 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: ai-engine-models
-  namespace: cloudpso
+  namespace: voicewright
   labels:
     app.kubernetes.io/name: ai-engine
 spec:
@@ -25,11 +25,11 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: ai-engine
-  namespace: cloudpso
+  namespace: voicewright
   labels:
     app.kubernetes.io/name: ai-engine
     app.kubernetes.io/component: inference
-    app.kubernetes.io/part-of: cloudpso-voice-agent
+    app.kubernetes.io/part-of: voicewright-voice-agent
 spec:
   replicas: 2
   selector:
@@ -60,7 +60,7 @@ spec:
       terminationGracePeriodSeconds: 60
       containers:
         - name: ai-engine
-          image: cloudpso/ai-engine:0.3.0
+          image: voicewright/ai-engine:0.3.0
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
@@ -69,12 +69,12 @@ spec:
               containerPort: 50052
           envFrom:
             - configMapRef:
-                name: cloudpso-config
+                name: voicewright-config
           env:
             - name: HUGGING_FACE_HUB_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: cloudpso-secrets
+                  name: voicewright-secrets
                   key: HUGGING_FACE_HUB_TOKEN
                   optional: true
           resources:
@@ -130,7 +130,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: ai-engine
-  namespace: cloudpso
+  namespace: voicewright
   labels:
     app.kubernetes.io/name: ai-engine
 spec:

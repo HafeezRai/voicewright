@@ -2,16 +2,16 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "cloudpso.fullname" . }}-backend-core
+  name: {{ include "voicewright.fullname" . }}-backend-core
   labels:
-    {{- include "cloudpso.componentLabels" (dict "ctx" $ "component" "backend-core") | nindent 4 }}
+    {{- include "voicewright.componentLabels" (dict "ctx" $ "component" "backend-core") | nindent 4 }}
 spec:
   {{- if not .Values.backendCore.autoscaling.enabled }}
   replicas: {{ .Values.backendCore.replicaCount }}
   {{- end }}
   selector:
     matchLabels:
-      {{- include "cloudpso.selectorLabels" . | nindent 6 }}
+      {{- include "voicewright.selectorLabels" . | nindent 6 }}
       app.kubernetes.io/component: backend-core
   strategy:
     type: RollingUpdate
@@ -21,14 +21,14 @@ spec:
   template:
     metadata:
       labels:
-        {{- include "cloudpso.selectorLabels" . | nindent 8 }}
+        {{- include "voicewright.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: backend-core
       {{- with .Values.backendCore.podAnnotations }}
       annotations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
     spec:
-      {{- include "cloudpso.imagePullSecrets" . | nindent 6 }}
+      {{- include "voicewright.imagePullSecrets" . | nindent 6 }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       terminationGracePeriodSeconds: {{ .Values.backendCore.terminationGracePeriodSeconds }}
@@ -43,12 +43,12 @@ spec:
               containerPort: {{ .Values.backendCore.service.grpcPort }}
           envFrom:
             - configMapRef:
-                name: {{ include "cloudpso.fullname" . }}-config
+                name: {{ include "voicewright.fullname" . }}-config
           env:
             - name: TURN_SHARED_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "cloudpso.secretName" . }}
+                  name: {{ include "voicewright.secretName" . }}
                   key: TURN_SHARED_SECRET
                   optional: true
           resources:
@@ -79,13 +79,13 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "cloudpso.fullname" . }}-backend-core
+  name: {{ include "voicewright.fullname" . }}-backend-core
   labels:
-    {{- include "cloudpso.componentLabels" (dict "ctx" $ "component" "backend-core") | nindent 4 }}
+    {{- include "voicewright.componentLabels" (dict "ctx" $ "component" "backend-core") | nindent 4 }}
 spec:
   type: {{ .Values.backendCore.service.type }}
   selector:
-    {{- include "cloudpso.selectorLabels" . | nindent 4 }}
+    {{- include "voicewright.selectorLabels" . | nindent 4 }}
     app.kubernetes.io/component: backend-core
   ports:
     - name: http

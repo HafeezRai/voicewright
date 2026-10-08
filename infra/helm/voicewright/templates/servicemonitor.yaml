@@ -9,16 +9,16 @@
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
-  name: {{ include "cloudpso.fullname" . }}-backend-core
+  name: {{ include "voicewright.fullname" . }}-backend-core
   labels:
-    {{- include "cloudpso.labels" . | nindent 4 }}
+    {{- include "voicewright.labels" . | nindent 4 }}
     {{- with .Values.serviceMonitor.additionalLabels }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
 spec:
   selector:
     matchLabels:
-      {{- include "cloudpso.selectorLabels" . | nindent 6 }}
+      {{- include "voicewright.selectorLabels" . | nindent 6 }}
       app.kubernetes.io/component: backend-core
   endpoints:
     - port: http
@@ -30,16 +30,16 @@ spec:
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
-  name: {{ include "cloudpso.fullname" . }}-ai-engine
+  name: {{ include "voicewright.fullname" . }}-ai-engine
   labels:
-    {{- include "cloudpso.labels" . | nindent 4 }}
+    {{- include "voicewright.labels" . | nindent 4 }}
     {{- with .Values.serviceMonitor.additionalLabels }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
 spec:
   selector:
     matchLabels:
-      {{- include "cloudpso.selectorLabels" . | nindent 6 }}
+      {{- include "voicewright.selectorLabels" . | nindent 6 }}
       app.kubernetes.io/component: ai-engine
   endpoints:
     - port: http
@@ -51,16 +51,16 @@ spec:
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
-  name: {{ include "cloudpso.fullname" . }}-triton
+  name: {{ include "voicewright.fullname" . }}-triton
   labels:
-    {{- include "cloudpso.labels" . | nindent 4 }}
+    {{- include "voicewright.labels" . | nindent 4 }}
     {{- with .Values.serviceMonitor.additionalLabels }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
 spec:
   selector:
     matchLabels:
-      {{- include "cloudpso.selectorLabels" . | nindent 6 }}
+      {{- include "voicewright.selectorLabels" . | nindent 6 }}
       app.kubernetes.io/component: triton
   endpoints:
     - port: metrics
